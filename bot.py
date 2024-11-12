@@ -1,15 +1,17 @@
-import discord
-import ffmpeg
 from discord.ext import commands
+import discord
 from discord_components import ComponentsBot
-import pyaudio
-import asyncio
+from discord import VoiceChannel, Member
 from VoiceChat import VoiceChat
 
+#default messaging permissions
 intents = discord.Intents.default()
-intents.messages = True
+
+#initialize bot via componentsbot with intents
 bot = ComponentsBot(command_prefix=",", intents=intents)
+#adds VoiceChat.py as cog
 bot.add_cog(VoiceChat(bot))
+#reads token
 with open("dontpushtorepo.txt", 'r') as key:
     token = key.readlines()[0]
 
