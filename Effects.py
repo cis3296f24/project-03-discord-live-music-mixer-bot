@@ -7,47 +7,62 @@ from discord.ext import commands
 from VoiceChat import VoiceChat
 
 
-class Effects(commands.Cog):
-    def __init(self, bot):
+#Effects class inherits VoiceChat class, can check all its booleans, queues, etc
+class Effects(VoiceChat):
+    def __init__(self, bot):
      super().__init__(bot)
 
-
+#EQ class allows for high-low frequency adjustments
     @commands.Command(name="eq")
     async def eq(self, ctx: commands.Context, value):
        return
 
+#High-pass filters only pass signals above its cutoff frequency and reduces signals below it to a specified tolerance 
+    @commands.Command(name="hifilter")
+    async def hifilter(self, ctx: commands.Context, value):
+       return
+    
+#Low-pass filters only pass signals below its cutoff frequency and reduces signals above it to a specified tolerance 
+    @commands.Command(name="lofilter")
+    async def lofilter(self, ctx: commands.Context, value):
+       return
+    
+#Phasers alter the frequency according to a specified range
     @commands.Command(name="phase")
     async def phaser(self, ctx: commands.Context, value):
        return
     
+#Echo adds delay and reverb to the track, adding an ethereal effect
     @commands.Command(name="echo")
     async def echo(self, ctx: commands.Context, value):
        return
     
+#Deepfry increases gain and distortion severely 
     @commands.Command(name="deepfry")
     async def deepfry(self, ctx: commands.Context, value):
        return
     
+#Reduces volume of audio signal based on certain thresholds
     @commands.Command(name="gate")
     async def gate(self, ctx: commands.Context, value):
        return
 
+#Frequency shifts will distort the pitch and texture of a track, creating a sour, artificial effect when pushed to its limits
     @commands.Command(name="fshift") 
     async def fshift(self, ctx: commands.Context, value):
        return
     
+#Increases a track's tempo 
     @commands.Command(name="speed")
     async def speed(self, ctx: commands.Context, value):
        return
     
+#Decreases a track's tempo
     @commands.Command(name="slow")
     async def slow(self, ctx: commands.Context, value):
        return
     
-    @commands.Command(name="reverse")
-    async def reverse(self, ctx: commands.Context, value):
-       return
-    
+#"Undoes" effects by returning to the original, unaltered track
     @commands.Command(name="undo")
     async def undo(self, ctx: commands.Context, value):
        return
