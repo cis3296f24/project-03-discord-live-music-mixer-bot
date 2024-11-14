@@ -12,11 +12,15 @@ class Effects(VoiceChat):
     def __init__(self, bot):
      super().__init__(bot)
 
-#EQ class allows for high-low frequency adjustments
-    @commands.Command(name="eq")
-    async def eq(self, ctx: commands.Context, value):
+#EQ class allows for high-low frequency adjustments. eqlow will specifically boost lower frequencies (bass boost, 808s, etc)
+    @commands.Command(name="eqlow")
+    async def eqlow(self, ctx: commands.Context, value):
        return
 
+##EQ class allows for high-low frequency adjustments. eqlow will specifically boost higher frequencies (treble, snares, hi-hats, claps, most leads, etc)
+    @commands.Command(name="eqhigh")
+    async def eqhigh(self, ctx: commands.Context, value):
+       return
 #High-pass filters only pass signals above its cutoff frequency and reduces signals below it to a specified tolerance 
     @commands.Command(name="hifilter")
     async def hifilter(self, ctx: commands.Context, value):
@@ -62,7 +66,12 @@ class Effects(VoiceChat):
     async def slow(self, ctx: commands.Context, value):
        return
     
+
+
+
+ #THIS FUNCTION WILL PROBABLY BE INCREDIBLY ANNOYING TO IMPLEMENT SO I'M PUTTING IT DOWN HERE UNTIL THIS BOT CAN PLAY MUSIC
+
 #"Undoes" effects by returning to the original, unaltered track
-    @commands.Command(name="undo")
-    async def undo(self, ctx: commands.Context, value):
-       return
+   # @commands.Command(name="undo")
+    #async def undo(self, ctx: commands.Context, value):
+       #return
