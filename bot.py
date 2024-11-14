@@ -12,7 +12,7 @@ bot = ComponentsBot(command_prefix=",", intents=intents)
 #adds VoiceChat.py as cog
 bot.add_cog(VoiceChat(bot))
 #reads token
-with open("dontpushtorepo.txt", 'r') as key:
+with open("./dontpushtorepo.txt", 'r') as key:
     token = key.readlines()[0]
 
 bot.run(token)
