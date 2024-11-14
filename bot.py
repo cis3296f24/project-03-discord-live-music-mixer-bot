@@ -3,6 +3,7 @@ import discord
 from discord_components import ComponentsBot
 from discord import VoiceChannel, Member
 from VoiceChat import VoiceChat
+from Effects import Effects
 
 #default messaging permissions
 intents = discord.Intents.default()
@@ -11,6 +12,7 @@ intents = discord.Intents.default()
 bot = ComponentsBot(command_prefix=",", intents=intents)
 #adds VoiceChat.py as cog
 bot.add_cog(VoiceChat(bot))
+bot.add_cog(Effects(bot))
 #reads token
 with open("./dontpushtorepo.txt", 'r') as key:
     token = key.readlines()[0]

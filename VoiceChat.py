@@ -12,7 +12,11 @@ import yt_dlp
 from queue import Queue
 from Song import Song
 import ffmpeg
+import time
+from Effects import Effects
 
+#ffmpeg path in cwd, temporary solution
+audiopath = './ffmpeg-2024-07-04-git-03175b587c-full_build/bin'
 
 #initializing class
 class VoiceChat(commands.Cog):
@@ -32,9 +36,12 @@ class VoiceChat(commands.Cog):
         self.joined = False
         #server ID
         self.id = 0
+        #runtime of currently playing track. useful when applying or undo-ing effects so that the bot can remember where it left off
+        self.runtime = 0
         #options for yt-dlp. indicates download as mp3, doesn't download playlist links, downloads highest-res audio possible
-        self.ytoptions = {'outmpath': './resources', 'noplaylist': 'True', 'format': 'bestaudio', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}], 'ffmpeg_location': './ffmpeg-2024-07-04-git-03175b587c-full_build/bin'}
+        self.ytoptions = {'outmpath': './resources', 'noplaylist': 'True', 'format': 'bestaudio', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}], 'ffmpeg_location': audiopath}
         self.ffmpegoptions = {'before_options': 'reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -80,8 +87,8 @@ class VoiceChat(commands.Cog):
         self.channel = None
 
         #stop song playing function
-    @commands.command(name="stop")
-    async def stop(self, ctx: commands.Context):
+    @commands.command(name="skip")
+    async def skip(self, ctx: commands.Context):
         self.playing = False
         self.paused = False
 
@@ -99,24 +106,34 @@ class VoiceChat(commands.Cog):
         #play song function
     @commands.Cog.listener()
     async def play(self, ctx: commands.Context):
-       while(self.queue.qsize() == 0):
-          s = self.queue.get()
-          #s.link.play()
+       #sleeps until current track is done playing
+       await ctx.send("INPLAY")
+       while(self.joined == True):
+         while(self.playing == True):
+            time.sleep(1)
+       #iterates through the entire queue in order until none are left, sets playing to true
+         while(self.queue.qsize() > 0):
+            s = self.queue.get()
+            print(s.title())
+            print("T35235")
+            aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=s.path())
+            ctx.voice_client.play(aplay)
+            #s.link.play()
+            self.playing = True
         
 
-
+        #apply effects function, will reference effects cog
     @commands.command(name = "fx")
     async def fx(self, ctx: commands.Context, effect):
         if(self.playing == False):
             ctx.send("Music needs to be playing for effects to be applied.")
         else:
+            #effects applied here
             print("Placeholder")
 
+    
 
-    def queuekeep(self, size):
-       print("T")
-
-
+        #downloads youtube videos, creates Song object, places object in the queue and sets it to be played 
     @commands.command(name = "get")
     async def get(self, ctx: commands.Context, url):
      if(self.joined == False):
@@ -124,18 +141,21 @@ class VoiceChat(commands.Cog):
      else:
       with yt_dlp.YoutubeDL(self.ytoptions) as youtube:
             try:
+             #downloads video and metadata, converts to MP3
              songinfo = youtube.extract_info(url, download = True)
+             #gets filename
              songpath = youtube.prepare_filename(songinfo)
-             print(songpath)
+             #concatenates cd for full path
              songpath = "./" + songpath
+             #gets title from metadata
              title = songinfo.get('title', None)
              #new song object made from downloaded video put into the queue
-             self.queue.put(Song(title,songpath))
-             print("SS")
+             so = Song(title,songpath)
+             self.queue.put(so)
              await ctx.send("Song Title: {}".format(title))
-             self.play(self, ctx)
-             
+             if not(self.playing):
+              await self.play(ctx)
             except:
-             await ctx.send("I can't manage to get the selected video.")
+             await ctx.send("I can't manage to get the selected track.")
         
     
