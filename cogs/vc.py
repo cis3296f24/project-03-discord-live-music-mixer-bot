@@ -10,7 +10,6 @@ import json
 import os
 import yt_dlp
 from queue import Queue
-from Song import Song
 import ffmpeg
 import time
 
@@ -23,7 +22,8 @@ class vc(commands.Cog):
         #bot instance
         self.bot = bot
         #music queue containing song name and file location on local system
-        self.queue = Queue()
+        self.pathqueue = Queue()
+        self.titlequeue = Queue()
         self.index = 0
         #paused boolean, important for play() and paused()
         self.paused = False
@@ -77,7 +77,7 @@ class vc(commands.Cog):
             try:
                 self.joined = False
                 await ctx.voice_client.disconnect()
-                await ctx.send("Dicconnected from Voice Channel")
+                await ctx.send("Disconnected from Voice Channel")
 
             except Exception as e:
                 await ctx.send("Disconnection Error")
@@ -110,13 +110,12 @@ class vc(commands.Cog):
          while(self.playing == True):
             time.sleep(1)
        #iterates through the entire queue in order until none are left, sets playing to true
-         while(self.queue.qsize() > 0):
-            s = self.queue.get()
-            print(s.title())
-            print("T35235")
-            aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=s.path())
-            ctx.voice_client.play(aplay)
-            #s.link.play()
+         while(self.pathqueue.qsize() > 0 and self.pathqueue.qsize() == self.titlequeue.qsize()):
+            path = self.pathqueue.get()
+            title = self.titlequeue.get()
+            aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=path)
+            self.channel[id].play(aplay)
+            await ctx.send("Now playing {}".format(title))
             self.playing = True
         
 
@@ -140,16 +139,13 @@ class vc(commands.Cog):
       with yt_dlp.YoutubeDL(self.ytoptions) as youtube:
             try:
              #downloads video and metadata, converts to MP3
-             songinfo = youtube.extract_info(url, download = True)
-             #gets filename
-             songpath = youtube.prepare_filename(songinfo)
-             #concatenates cd for full path
-             songpath = "./" + songpath
+             songinfo = youtube.extract_info(url, download = False)
+
              #gets title from metadata
              title = songinfo.get('title', None)
              #new song object made from downloaded video put into the queue
-             so = Song(title,songpath)
-             self.queue.put(so)
+             self.titlequeue.put(title)
+             self.pathqueue.put(url)
              await ctx.send("Song Title: {}".format(title))
              if not(self.playing):
               await self.play(ctx)
