@@ -1,4 +1,4 @@
-from discord_components import Select, SelectOption, Button
+#cogs/vc.py
 from discord.ext import commands
 import discord
 from discord import VoiceChannel, Member, VoiceClient
@@ -13,13 +13,12 @@ from queue import Queue
 from Song import Song
 import ffmpeg
 import time
-from Effects import Effects
 
 #ffmpeg path in cwd, temporary solution
 audiopath = './ffmpeg-2024-07-04-git-03175b587c-full_build/bin'
 
 #initializing class
-class VoiceChat(commands.Cog):
+class vc(commands.Cog):
     def __init__(self, bot):
         #bot instance
         self.bot = bot
@@ -51,17 +50,19 @@ class VoiceChat(commands.Cog):
         #join voice chat function
     @commands.command(name="join")
     async def voice_join(self, ctx: commands.Context):
+
+        if ctx.voice_client:
+            await ctx.send("Already Connected to Voice Channel")
+            return
+
         #gets server ID
         self.id = int(ctx.guild.id)
-        #if the command author is in a voice channel, 
-        # and the bot isn't already in a channel, it will join that channel
         if ctx.author.voice:
-            channel = ctx.author.voice.channel
-            if(self.joined == False):
-             #joined set to true, connects to server and sets channel ID
-             self.joined = True
-             await ctx.send("Connecting..")
-             self.channel[id] = await channel.connect()
+            #joined set to true, connects to server and sets channel ID
+            self.joined = True
+            await ctx.send("Connecting..")
+            channel = await ctx.author.voice.channel.connect()
+            self.channel[id] = channel
         else:
             await ctx.send("Please join a voice channel.")
 
@@ -71,20 +72,17 @@ class VoiceChat(commands.Cog):
     @commands.command(name="leave")
     async def voice_leave(self, ctx: commands.Context):
         #if bot is in a voice channel, and isn't playing any songs:
+
         if ctx.voice_client:
-            if(self.paused == False and self.playing == False and self.joined):
+            try:
                 self.joined = False
-                channel = ctx.author.voice.channel
-                keyguild = ctx.guild
-                #searches all channels the bot is in for the one that matches server ID, disconnects from it
-                for client in self.bot.voice_clients:
-                    voicechan = discord.utils.get(self.bot.voice_clients, guild=ctx.guild)
-                    print(voicechan)
-                    await ctx.send("Disconnecting..")
-                    await voicechan.disconnect()
+                await ctx.voice_client.disconnect()
+                await ctx.send("Dicconnected from Voice Channel")
+
+            except Exception as e:
+                await ctx.send("Disconnection Error")
         else:
-            await ctx.send("Failed to leave channel.")
-        self.channel = None
+            await ctx.send("Not in Voice Channel")
 
         #stop song playing function
     @commands.command(name="skip")
@@ -157,5 +155,7 @@ class VoiceChat(commands.Cog):
               await self.play(ctx)
             except:
              await ctx.send("I can't manage to get the selected track.")
-        
-    
+
+async def setup(bot):
+    await bot.add_cog(vc(bot))
+

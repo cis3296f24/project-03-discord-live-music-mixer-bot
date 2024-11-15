@@ -1,20 +1,28 @@
-from discord.ext import commands
 import discord
-from discord_components import ComponentsBot
+from discord.ext import commands
 from discord import VoiceChannel, Member
-from VoiceChat import VoiceChat
-from Effects import Effects
+import os
+import asyncio
 
-#default messaging permissions
-intents = discord.Intents.default()
-
-#initialize bot via componentsbot with intents
-bot = ComponentsBot(command_prefix=",", intents=intents)
-#adds VoiceChat.py as cog
-bot.add_cog(VoiceChat(bot))
-bot.add_cog(Effects(bot))
-#reads token
-with open("./dontpushtorepo.txt", 'r') as key:
+with open("./discordkey.txt", 'r') as key:
     token = key.readlines()[0]
 
-bot.run(token)
+intents = discord.Intents.default()
+intents.message_content = True  # For reading message content (if needed)
+intents.guilds = True  # Required for guild-related events
+intents.voice_states = True  # Required for voice-related events
+intents.members = True  # For detecting user join/leave in voice
+bot = commands.Bot(command_prefix=",", intents=intents)
+
+async def go():
+    #adds VoiceChat.py as cog
+    for fname in os.listdir("./cogs"):
+        if fname.endswith(".py"):
+            await bot.load_extension(f"cogs.{fname[:-3]}")
+
+async def main():
+    async with bot:
+        await go()
+        await bot.start(token)
+
+asyncio.run(main())

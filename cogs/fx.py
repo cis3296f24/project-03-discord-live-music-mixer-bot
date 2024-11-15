@@ -2,12 +2,11 @@ import discord
 from discord import VoiceChannel, Member, VoiceClient
 import asyncio
 from asyncio import run_coroutine_threadsafe
-from discord_components import Select, SelectOption, Button
 from discord.ext import commands
 
 
 #Effects class inherits VoiceChat class, can check all its booleans, queues, etc
-class Effects(commands.Cog):
+class fx(commands.Cog):
     def __init__(self, bot):
      self.bot = bot
 
@@ -73,8 +72,8 @@ class Effects(commands.Cog):
     async def slow(self, ctx: commands.Context, value):
        return
     
-
-
+async def setup(bot):
+    await bot.add_cog(fx(bot))
 
  #THIS FUNCTION WILL PROBABLY BE INCREDIBLY ANNOYING TO IMPLEMENT SO I'M PUTTING IT DOWN HERE UNTIL THIS BOT CAN PLAY MUSIC
 
