@@ -14,11 +14,12 @@ import ffmpeg
 import time
 
 #ffmpeg path in cwd, temporary solution
-audiopath = './ffmpeg-2024-07-04-git-03175b587c-full_build/bin'
+audiopath = "./project-03-discord-live-music-mixer-bot/ffmpeg-2024-07-04-git-03175b587c-full_build/bin"
 
 #initializing class
 class vc(commands.Cog):
     def __init__(self, bot):
+        self.audiopath = os.path.join(".", "project-03-discord-live-music-mixer-bot", "ffmpeg-2024-07-04-git-03175b587c-full_build", "bin")
         #bot instance
         self.bot = bot
         #music queue containing song name and file location on local system
@@ -38,7 +39,7 @@ class vc(commands.Cog):
         #runtime of currently playing track. useful when applying or undo-ing effects so that the bot can remember where it left off
         self.runtime = 0
         #options for yt-dlp. indicates download as mp3, doesn't download playlist links, downloads highest-res audio possible
-        self.ytoptions = {'outmpath': './resources', 'noplaylist': 'True', 'format': 'bestaudio', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}], 'ffmpeg_location': audiopath}
+        self.ytoptions = {'outmpath': './resources', 'noplaylist': 'True', 'format': 'bestaudio', 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}], 'ffmpeg_location': self.audiopath}
         self.ffmpegoptions = {'before_options': 'reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
 
 
@@ -61,14 +62,12 @@ class vc(commands.Cog):
             #joined set to true, connects to server and sets channel ID
             self.joined = True
             await ctx.send("Connecting..")
-            channel = await ctx.author.voice.channel.connect()
-            self.channel[id] = channel
+            self.channel = await ctx.author.voice.channel.connect()
+            #self.channel[id] = channel
         else:
             await ctx.send("Please join a voice channel.")
 
         #leave voice chat function
-        #NOTE: voice_leave is not functional. my code refuses to acknowledge the VoiceClient object it needs to disconnect
-        #from the channel. Everything up to "await voicechan.disconnect()" works as expected, AFAIK.
     @commands.command(name="leave")
     async def voice_leave(self, ctx: commands.Context):
         #if bot is in a voice channel, and isn't playing any songs:
@@ -114,7 +113,7 @@ class vc(commands.Cog):
             path = self.pathqueue.get()
             title = self.titlequeue.get()
             aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=path)
-            self.channel[id].play(aplay)
+            self.channel.play(aplay)
             await ctx.send("Now playing {}".format(title))
             self.playing = True
         
@@ -138,12 +137,11 @@ class vc(commands.Cog):
      else:
       with yt_dlp.YoutubeDL(self.ytoptions) as youtube:
             try:
-             #downloads video and metadata, converts to MP3
+             #downloads video metadata
              songinfo = youtube.extract_info(url, download = False)
-
              #gets title from metadata
              title = songinfo.get('title', None)
-             #new song object made from downloaded video put into the queue
+             #song info put into the queues
              self.titlequeue.put(title)
              self.pathqueue.put(url)
              await ctx.send("Song Title: {}".format(title))
