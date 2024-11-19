@@ -154,40 +154,45 @@ class vc(commands.Cog):
        self.playing = False
 
         #downloads youtube videos, creates Song object, places object in the queue and sets it to be played 
-    @commands.command(name = "play")
-    async def play(self, ctx: commands.Context, url):
-     if(self.joined == False):
-         await ctx.send("I must be in a voice channel to play music!")
-     else:
-      with yt_dlp.YoutubeDL(self.ytoptions) as youtube:
-            try:
-             #downloads video metadata
-             songinfo = youtube.extract_info(url, download = True)
-             songpath = youtube.prepare_filename(songinfo).replace('webm', 'mp3')
-             songpath = "./" + songpath
-             #gets title from metadata
-             title = songinfo.get('title', None)
-             #song info put into the queues
-             self.titlequeue.put(title)
-             self.pathqueue.put(songpath)
-             await ctx.send("Song Title: {}".format(title))
-             #Stalls here until the previous track is finished
-             while(self.playing):
-              time.sleep(1)
-       #iterates through the entire queue in order until none are left, sets playing to true
-             while(self.pathqueue.qsize() > 0 and self.pathqueue.qsize() == self.titlequeue.qsize()):
-              #Gets path and title from queues
-              path = self.pathqueue.get()
-              title = self.titlequeue.get()
-              #Plays with FFmpeg and sets path to queue get() 
-              aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=path)
-              #Plays song, goes to self.next() to check when the track stops playing
-              self.channel.play(aplay, after=await self.next(ctx))
-              await ctx.send("Now playing {}".format(title))
-              self.playing = True
-            except:
-              await ctx.send("I can't manage to get the selected track.")
+       
+    
+@commands.command(name="play")
+async def play(self, ctx: commands.Context, url):
+    if not ctx.voice_client:
+        await ctx.send("I must be in a voice channel to play music!")
+        return
 
+    async with ctx.typing():
+        try:
+            with yt_dlp.YoutubeDL(self.ytoptions) as youtube:
+                songinfo = await self.bot.loop.run_in_executor(None, lambda: youtube.extract_info(url, download=True))
+                songpath = youtube.prepare_filename(songinfo).replace('webm', 'mp3')
+                title = songinfo.get('title', None)
+
+            await self.titlequeue.put(title)
+            await self.pathqueue.put(songpath)
+            await ctx.send(f"Added to queue: {title}")
+
+            if not ctx.voice_client.is_playing():
+                await self.play_next(ctx)
+        except Exception as e:
+            await ctx.send(f"An error occurred: {str(e)}")
+
+async def play_next(self, ctx):
+    if self.pathqueue.empty():
+        await ctx.send("The queue is empty.")
+        return
+
+    try:
+        path = await self.pathqueue.get()
+        title = await self.titlequeue.get()
+
+        source = discord.FFmpegPCMAudio(executable="ffmpeg", source=path, **self.ffmpegoptions)
+        ctx.voice_client.play(source, after=lambda e: self.bot.loop.create_task(self.play_next(ctx)))
+        await ctx.send(f"Now playing: {title}")
+    except Exception as e:
+        await ctx.send(f"Error playing {title}: {str(e)}")
+        await self.play_next(ctx)
 async def setup(bot):
     await bot.add_cog(vc(bot))
 

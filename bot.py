@@ -12,7 +12,12 @@ intents.message_content = True  # For reading message content (if needed)
 intents.guilds = True  # Required for guild-related events
 intents.voice_states = True  # Required for voice-related events
 intents.members = True  # For detecting user join/leave in voice
-bot = commands.Bot(command_prefix=",", intents=intents)
+
+bot = commands.Bot(
+    command_prefix=",", 
+    intents=intents,
+    ffmpeg_options={'executable': 'ffmpeg'}
+)
 
 async def go():
     #adds VoiceChat.py as cog
