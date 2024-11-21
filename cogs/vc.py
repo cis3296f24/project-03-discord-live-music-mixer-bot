@@ -26,6 +26,7 @@ class vc(commands.Cog):
         #music queue containing song name and file location on local system
         self.pathqueue = Queue()
         self.titlequeue = Queue()
+        self.urlqueue = Queue()
         self.index = 0
         #paused boolean, important for play() and paused()
         self.paused = False
@@ -35,7 +36,7 @@ class vc(commands.Cog):
         self.channel = {}
         #indicates if the bot has joined a channel
         self.joined = False
-        
+        self.played = True
         self.quit = True
         #server ID
         self.id = 0
@@ -80,6 +81,8 @@ class vc(commands.Cog):
         if ctx.voice_client:
             try:
                 self.joined = False
+                self.playing = False
+                self.paused = False
                 await ctx.voice_client.disconnect()
                 await ctx.send("Disconnected from Voice Channel")
 
@@ -87,12 +90,6 @@ class vc(commands.Cog):
                 await ctx.send("Disconnection Error")
         else:
             await ctx.send("Not in Voice Channel")
-
-        #stop song playing function
-    @commands.command(name="skip")
-    async def skip(self, ctx: commands.Context):
-        self.playing = False
-        self.paused = False
 
         #pause song function
     @commands.command(name = "pause")
@@ -138,26 +135,26 @@ class vc(commands.Cog):
             print("Placeholder")
 
     @commands.command(name = "skip")
-    async def skip(self, ctx: commands.Context, effect):
+    async def skip(self, ctx: commands.Context):
         if(self.playing):
+           #stops audio and sets playing to false
            self.channel.stop()
            self.playing = False
+           #leaves here if queue is empty
+           if(self.pathqueue.qsize() == 0):
+              await ctx.send("The queue is now empty.")
+              return
+           else:
+              #grabs info from nearest queue get and puts it back into play
+              title = self.titlequeue.get()
+              path = self.pathqueue.get()
+              await self.play(ctx, self.urlqueue.get())
 
     @commands.command(name = "alive")
     async def alive(self, ctx: commands.Context):
        await ctx.send("I am alive!")
 
 
-    @commands.Cog.listener()
-    async def next(self, ctx: commands.Context, path):
-       while(self.channel.is_playing()):
-        time.sleep(1)
-       #deletes the file in local storage after song is done playing
-       try:
-        os.remove(path)
-       except:
-        await ctx.send(traceback.print_exc())
-       self.playing = False
 
         #downloads youtube videos, creates Song object, places object in the queue and sets it to be played 
     @commands.command(name = "play")
@@ -176,23 +173,37 @@ class vc(commands.Cog):
              #song info put into the queues
              self.titlequeue.put(title)
              self.pathqueue.put(songpath)
+             self.urlqueue.put(url)
              await ctx.send("Song Title: {}".format(title))
              #Stalls here until the previous track is finished
              while(self.playing):
-              time.sleep(1)
+              await asyncio.sleep(1)
        #iterates through the entire queue in order until none are left, sets playing to true
              while(self.pathqueue.qsize() > 0 and self.pathqueue.qsize() == self.titlequeue.qsize()):
               #Gets path and title from queues
               path = self.pathqueue.get()
               title = self.titlequeue.get()
+              url = self.urlqueue.get()
               #Plays with FFmpeg and sets path to queue get() 
               aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=path)
               #Plays song, goes to self.next() to check when the track stops playing
-              self.channel.play(aplay, after=await self.next(ctx, path))
-              await ctx.send("Now playing {}".format(title))
               self.playing = True
+              self.played = True
+              self.channel.play(aplay)
+              await ctx.send("Now playing {}".format(title))
+              #waits for the track to complete
+              while(self.channel.is_playing()):
+                 #print("T")
+                 await asyncio.sleep(1)
+              self.playing = False
+              self.played = False
+              os.remove(path)
             except:
-              await ctx.send("I can't manage to get the selected track.")
+              #tests if it's interrupted
+              if(self.played):
+                 await ctx.send("My audio stream was interrupted!")
+              else:
+                 await ctx.send("I can't manage to get the selected track.")
 
 async def setup(bot):
     await bot.add_cog(vc(bot))
