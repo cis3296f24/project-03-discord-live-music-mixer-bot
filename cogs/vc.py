@@ -12,6 +12,7 @@ import yt_dlp
 from queue import Queue
 import ffmpeg
 import time
+import traceback
 
 #ffmpeg path in cwd, temporary solution
 audiopath = "./project-03-discord-live-music-mixer-bot/ffmpeg-2024-07-04-git-03175b587c-full_build/bin"
@@ -148,9 +149,14 @@ class vc(commands.Cog):
 
 
     @commands.Cog.listener()
-    async def next(self, ctx: commands.Context):
+    async def next(self, ctx: commands.Context, path):
        while(self.channel.is_playing()):
         time.sleep(1)
+       #deletes the file in local storage after song is done playing
+       try:
+        os.remove(path)
+       except:
+        await ctx.send(traceback.print_exc())
        self.playing = False
 
         #downloads youtube videos, creates Song object, places object in the queue and sets it to be played 
@@ -182,7 +188,7 @@ class vc(commands.Cog):
               #Plays with FFmpeg and sets path to queue get() 
               aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=path)
               #Plays song, goes to self.next() to check when the track stops playing
-              self.channel.play(aplay, after=await self.next(ctx))
+              self.channel.play(aplay, after=await self.next(ctx, path))
               await ctx.send("Now playing {}".format(title))
               self.playing = True
             except:
