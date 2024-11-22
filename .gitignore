@@ -1,0 +1,4 @@
+# ignore txt file with key inside
+discordkey.txt
+# ignore ffmpeg folder
+ffmpeg-2024-07-04-git-03175b587c-full_build
