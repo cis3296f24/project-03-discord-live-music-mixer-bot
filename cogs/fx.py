@@ -12,7 +12,6 @@ class fx(commands.Cog):
 
 
 
-
     @commands.Cog.listener()
     async def on_ready(self):
         return
