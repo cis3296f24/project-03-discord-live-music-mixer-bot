@@ -7,24 +7,27 @@ from queue import Queue
 import os
 from dataclasses import dataclass
 from typing import List
+import ffmpeg
+import time
+import traceback
 
 @dataclass
 class Song:
     title: str
     path: str
     url: str
-    order: int  # to track insertion order to maintain priority inside the queue
+    order: int  # to maintain assigned song priorities inside the queue
 
 class OrderedQueue:
     def __init__(self):
         self._queue: List[Song] = []
         self._counter = 0
-
+        self._current_song: Song = None  
     def put(self, song: Song):
-        song.order = self._counter
-        self._counter += 1
+        song.order = self._counter  # Assign each song an priority upon being put inside the queue
+        self._counter += 1          # Song 1 = Priority 0 / Song 2 = Priority 1 / etc...
         self._queue.append(song)
-        self._queue.sort(key=lambda x: x.order)  # Keep songs sorted by order. Upon inserting into queue sorts all songs by priority/order
+        self._queue.sort(key=lambda x: x.order)  # Keep songs sorted by their assigned order. Upon inserting into queue sorts the new queue by order
 
     def get(self) -> Song:
         if not self.empty():
@@ -36,21 +39,21 @@ class OrderedQueue:
 
     def size(self) -> int:
         return len(self._queue)
+    
+   
 
 class vc(commands.Cog):
     def __init__(self, bot):
         self.audiopath = os.path.join(".", "project-03-discord-live-music-mixer-bot", "C:\\ffmpeg")        
         self.bot = bot
-        self.queue = OrderedQueue()  # Using our custom OrderedQueue
-        self.index = 0
+        self.queue = OrderedQueue()  # custom OrderedQueue class
         self.paused = False
         self.playing = False
         self.channel = {}
         self.joined = False
         self.played = True
-        self.quit = True
         self.id = 0
-        self.runtime = 0
+        
         self.ytoptions = {
             'outmpath': './resources',
             'noplaylist': 'True',
@@ -61,10 +64,31 @@ class vc(commands.Cog):
             }],
             '--ffmpeg-location': "C:\\ffmpeg"
         }
+
         self.ffmpegoptions = {
             'before_options': 'reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
             'options': '-vn'
         }
+
+        #TESTING FX Commands ---> Nov 24
+
+        self.current_filter = None
+        self.effects = {
+            "volume": lambda x: f"volume={x}",
+            "bass": lambda x: f"bass=g={x}",
+            "speed": lambda x: f"atempo={x}",
+            "clear": lambda: None
+        }
+
+
+    @commands.command(name= "volume")
+    async def fx_volume(self, ctx: commands.Context, value):
+        if not ctx.voice_client:
+            await ctx.send("I'm not in a voice channel!")
+            return
+        
+        await ctx.send("VOLUME set to : {}".format(value))
+
 
     @commands.command(name="join")
     async def voice_join(self, ctx: commands.Context):
@@ -151,8 +175,7 @@ class vc(commands.Cog):
                 songpath = youtube.prepare_filename(songinfo).replace('webm', 'mp3')
                 songpath = "./" + songpath
                 title = songinfo.get('title', None)
-                
-                # Create new Song object and add to ordered queue
+
                 song = Song(title, songpath, url, 0)  # Order will be set by OrderedQueue
                 self.queue.put(song)
                 await ctx.send("Song Title: {}".format(title))
@@ -161,7 +184,6 @@ class vc(commands.Cog):
                 while self.playing:
                     await asyncio.sleep(1)
 
-                # Process queue
                 while not self.queue.empty():
                     current_song = self.queue.get()
                     aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=current_song.path)
@@ -184,6 +206,10 @@ class vc(commands.Cog):
                     await ctx.send("My audio stream was interrupted!")
                 else:
                     await ctx.send("I can't manage to get the selected track.")
+
+       
+
+            
 
 async def setup(bot):
     await bot.add_cog(vc(bot))
