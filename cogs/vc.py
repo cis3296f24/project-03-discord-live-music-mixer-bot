@@ -6,10 +6,13 @@ import yt_dlp
 from queue import Queue
 import os
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 import ffmpeg
 import time
 import traceback
+from pydub import AudioSegment
+from pydub.playback import play
+import copy
 
 @dataclass
 class Song:
@@ -31,8 +34,11 @@ class OrderedQueue:
 
     def get(self) -> Song:
         if not self.empty():
-            return self._queue.pop(0)
-        raise IndexError("Queue is empty")
+            read_only_copy = copy.deepcopy(self._queue[0]) # Peek doesn't exist in Python for some reason. Deepcopy implementation so peek() function works
+            self._current_song = read_only_copy
+            curr_song = self._queue.pop()
+            return curr_song
+        raise IndexError("Queue is empty as a result of a call to get()")
 
     def empty(self) -> bool:
         return len(self._queue) == 0
@@ -40,7 +46,18 @@ class OrderedQueue:
     def size(self) -> int:
         return len(self._queue)
     
-   
+    def peek(self) -> Song:
+        if self._current_song is not None:
+            return copy.deepcopy(self._current_song)
+        raise IndexError("Queue is empty as a result of a call to peek()")
+    
+    def clear_current(self):
+        self._current_song = None
+
+    def prepare_ffmpeg_parse(self)->str:
+        #placeholder for now --> implementing more PyDub functionality
+        return 1
+        
 
 class vc(commands.Cog):
     def __init__(self, bot):
@@ -65,30 +82,22 @@ class vc(commands.Cog):
             '--ffmpeg-location': "C:\\ffmpeg"
         }
 
-        self.ffmpegoptions = {
-            'before_options': 'reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-            'options': '-vn'
-        }
 
-        #TESTING FX Commands ---> Nov 24
+    # Pydub Volume Manipulation
+    @commands.command(name="volume")
+    async def fx_volume(self, ctx: commands.Context, vol: float):
+        """Wrapper method that uses the façade to apply volume filter"""
+        try:
+            current_song = self.queue.peek()
+            extracted_audio = AudioSegment.from_file(current_song.path, format="mp3")
+            await ctx.send(f"BEFORE VOLUME CHANGE the AUDIO DBFS = {extracted_audio.dBFS}")
+            extracted_audio = extracted_audio + vol
+            await ctx.send(f"Volume set to: {vol}")
+            await ctx.send(f"AFTER VOLUME CHANGE the AUDIO DBFS = {extracted_audio.dBFS}")
+        except Exception as e:
+            await ctx.send(f"Error applying volume effect: {str(e)}")
 
-        self.current_filter = None
-        self.effects = {
-            "volume": lambda x: f"volume={x}",
-            "bass": lambda x: f"bass=g={x}",
-            "speed": lambda x: f"atempo={x}",
-            "clear": lambda: None
-        }
-
-
-    @commands.command(name= "volume")
-    async def fx_volume(self, ctx: commands.Context, value):
-        if not ctx.voice_client:
-            await ctx.send("I'm not in a voice channel!")
-            return
-        
-        await ctx.send("VOLUME set to : {}".format(value))
-
+    # Pydub 
 
     @commands.command(name="join")
     async def voice_join(self, ctx: commands.Context):
