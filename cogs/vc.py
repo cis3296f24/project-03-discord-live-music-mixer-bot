@@ -16,6 +16,42 @@ import copy
 import numpy as np
 from scipy.fft import fft, fftfreq
 
+@dataclass
+class FilteredSong:
+    forder: int
+    fpath: str 
+
+class FilteredAudioQueue:
+    def __init__(self):
+        self.filtered_queue: List[FilteredSong] = []
+        self.fcounter = 0
+        self.fcurrent_song: FilteredSong = None
+
+    def put(self, audio: FilteredSong):
+        audio.forder = self.fcounter  
+        self.fcounter += 1          
+        self.filtered_queue.append(audio)
+        self.filtered_queue.sort(key=lambda x: x.forder) 
+
+
+    def get(self) -> FilteredSong:
+        if not self.empty():
+            read_only_copy = copy.deepcopy(self.filtered_queue[0]) 
+            self.fcurrent_song = read_only_copy
+            curr_song = self.filtered_queue.pop()                   
+            return curr_song
+        raise IndexError("Queue is empty as a result of a call to get()")
+    
+
+    def peek(self) -> FilteredSong:
+        if self.fcurrent_song is not None:
+            return copy.deepcopy(self.fcurrent_song)
+        raise IndexError("Queue is empty as a result of a call to peek()")
+
+
+    def empty(self) -> bool:
+        return len(self.filtered_queue) == 0
+        
 
 @dataclass
 class Song:
@@ -67,6 +103,7 @@ class vc(commands.Cog):
         self.audiopath = os.path.join(".", "project-03-discord-live-music-mixer-bot", "C:\\ffmpeg")        
         self.bot = bot
         self.queue = OrderedQueue()  # custom OrderedQueue class
+        self.fqueue = FilteredAudioQueue()
         self.paused = False
         self.playing = False
         self.channel = {}
@@ -175,20 +212,29 @@ class vc(commands.Cog):
                         ctx.voice_client.stop()     # Stop current playback before switching source
                         await asyncio.sleep(0.5)    # Small delay to ensure clean switch
                         
-                        #PUT NEW SONG INTO THE QUEUE 
-                        # SET THE NEW SONG TO CURRENT_SONG --> SO THAT PAUSE/UNPAUSE WORKS FOR IT
-
-
-
-
-                        # Play new audio
-                        
-                        ctx.voice_client.play(new_source)
-                        await ctx.send(f"Applied {freq}Hz lowpass filter")
+                        # (1) I have FFMPEG executable from PCM Audio & (2) The Path --> (3) Put into queue, play the song
+                        #(4) Utilize the SAME play() global boolean state variables so we ENFORCE that 1 song plays at 1 time & 
+                        #                   so that we recognize the filtered Song as a Song
+                        self.fqueue.put(new_source)
+                        while not self.fqueue.empty():
+                            self.playing = True
+                            self.played = True
+                            ctx.voice_client.play(new_source)
+                            await ctx.send(f"Applied {freq}Hz lowpass filter")
+                            
+                            # Wait for the track to complete
+                        while ctx.voice_client.is_playing() or self.paused:
+                            await asyncio.sleep(1)
+                            
+                        self.playing = False
+                        self.played = False
+                        self.paused = False   
+                        #ctx.voice_client.play(new_source)
+                        #await ctx.send(f"Applied {freq}Hz lowpass filter")
                         
                     except Exception as e:
-                        await ctx.send(f"Error playing filtered audio: {str(e)}")
-                        return
+                        if self.played:
+                            await ctx.send("IGNORE THIS ERROR!My FILTERED audio stream was interrupted!")
                     
                     finally:
                         # Cleanup in finally block to ensure it runs
