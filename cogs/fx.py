@@ -1,106 +1,153 @@
 
 import discord
-from discord import VoiceChannel, Member, VoiceClient
-import asyncio
-from asyncio import run_coroutine_threadsafe
 from discord.ext import commands
-import ffmpeg
-import subprocess  # Equivalent to forking a process to create a child process. Mimics ffmpeg cmdline parsing of files
 from pydub import AudioSegment
 import os
 
-# Effects class inherits VoiceChat class, can check all its booleans, queues, etc
+# Effects class inherits from commands.Cog
 class fx(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot, vc_instance):
         self.bot = bot
-        # Temporary directory for processed audio
+        self.vc_instance = vc_instance  # Reference to vc.py instance for queue interaction
         self.temp_dir = "./temp_audio"
         if not os.path.exists(self.temp_dir):
-            os.makedirs(self.temp_dir)  # Create the folder if it doesn't exist
+            os.makedirs(self.temp_dir)  # Create temp directory if not exists
 
     async def process_audio(self, ctx, effect_name, effect_function, *args):
-        """Generic function to process audio with a given effect"""
+        """Apply effect to the currently playing audio in the queue."""
         try:
             if not ctx.voice_client or not ctx.voice_client.is_playing():
                 await ctx.send("I'm not in a voice channel or no audio is playing!")
                 return
 
-            # Get the currently playing song
-            current_song = ctx.voice_client.source
-            original_path = current_song.source  # Assumes the source is a file path
-            new_path = os.path.join(self.temp_dir, f"{effect_name}.mp3")
+            # Get the currently playing song path from vc.py queue
+            if self.vc_instance.queue.empty():
+                await ctx.send("The queue is empty!")
+                return
+
+            current_song = self.vc_instance.queue.peek()
+            original_path = current_song.path
+            new_path = os.path.join(self.temp_dir, f"{effect_name}_{current_song.title}.mp3")
 
             # Apply the effect using Pydub
             audio = AudioSegment.from_file(original_path)
             processed_audio = effect_function(audio, *args)
             processed_audio.export(new_path, format="mp3")
 
-            # Play the processed audio
-            ctx.voice_client.stop()
-            ctx.voice_client.play(discord.FFmpegPCMAudio(new_path))
-            await ctx.send(f"{effect_name} Effect Applied.")
+            # Replace the current song in the queue with the processed audio
+            self.vc_instance.queue.clear_current()  # Remove the current song
+            current_song.path = new_path  # Update path to processed audio
+            self.vc_instance.queue.put(current_song)  # Reinsert it into the queue
+            await ctx.send(f"{effect_name} effect applied to {current_song.title}.")
+
         except Exception as e:
             await ctx.send(f"Error applying {effect_name}: {e}")
 
-    # EQ class allows for high-low frequency adjustments. eqlow will specifically boost lower frequencies (bass boost, 808s, etc)
     @commands.command(name="eqlow")
-    async def eqlow(self, ctx: commands.Context, value: int):
-        if not ctx.voice_client:
-            await ctx.send("I'm not in a voice channel!")
-            return
-        if value < 20 or value > 20000:
-            await ctx.send("Frequency value must be between 20Hz and 20kHz.")
+    async def eqlow(self, ctx: commands.Context, value: float):
+        # Apply a low-pass filter to boost lower frequencies
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.send("I'm not in a voice channel or no audio is playing!")
             return
         await self.process_audio(ctx, "eqlow", lambda audio: audio.low_pass_filter(value))
-        return
 
-    # EQ class allows for high-low frequency adjustments. eqhigh will specifically boost higher frequencies (treble, snares, etc)
     @commands.command(name="eqhigh")
-    async def eqhigh(self, ctx: commands.Context, value: int):
-        if not ctx.voice_client:
-            await ctx.send("I'm not in a voice channel!")
-            return
-        if value < 20 or value > 20000:
-            await ctx.send("Frequency value must be between 20Hz and 20kHz.")
+    async def eqhigh(self, ctx: commands.Context, value: float):
+        # Apply a high-pass filter to boost higher frequencies
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.send("I'm not in a voice channel or no audio is playing!")
             return
         await self.process_audio(ctx, "eqhigh", lambda audio: audio.high_pass_filter(value))
-        return
 
-    # High-pass filters only pass signals above its cutoff frequency and reduces signals below it to a specified tolerance
     @commands.command(name="hifilter")
-    async def hifilter(self, ctx: commands.Context, cutoff: int):
+    async def hifilter(self, ctx: commands.Context, value: float):
+        # Apply a high-pass filter to pass signals above a cutoff frequency
         if not ctx.voice_client or not ctx.voice_client.is_playing():
             await ctx.send("I'm not in a voice channel or no audio is playing!")
             return
-        if cutoff < 20 or cutoff > 20000:
-            await ctx.send("Cutoff frequency must be between 20Hz and 20kHz.")
-            return
-        await self.process_audio(ctx, "hifilter", lambda audio: audio.high_pass_filter(cutoff))
-        return
+        await self.process_audio(ctx, "hifilter", lambda audio: audio.high_pass_filter(value))
 
-    # Low-pass filters only pass signals below its cutoff frequency and reduces signals above it to a specified tolerance
     @commands.command(name="lofilter")
-    async def lofilter(self, ctx: commands.Context, cutoff: int):
+    async def lofilter(self, ctx: commands.Context, value: float):
+        # Apply a low-pass filter to pass signals below a cutoff frequency
         if not ctx.voice_client or not ctx.voice_client.is_playing():
             await ctx.send("I'm not in a voice channel or no audio is playing!")
             return
-        if cutoff < 20 or cutoff > 20000:
-            await ctx.send("Cutoff frequency must be between 20Hz and 20kHz.")
-            return
-        await self.process_audio(ctx, "lofilter", lambda audio: audio.low_pass_filter(cutoff))
-        return
+        await self.process_audio(ctx, "lofilter", lambda audio: audio.low_pass_filter(value))
 
-    # Echo adds delay and reverb to the track, adding an ethereal effect
+    @commands.command(name="phase")
+    async def phaser(self, ctx: commands.Context, value: float):
+        # Apply a phaser effect by inverting the audio waveform
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.send("I'm not in a voice channel or no audio is playing!")
+            return
+
+        def invert_phase(audio):
+            return audio._spawn(-audio.raw_data)  # Invert the waveform
+
+        await self.process_audio(ctx, "phase", invert_phase)
+
     @commands.command(name="echo")
     async def echo(self, ctx: commands.Context, delay: int):
+        # Apply an echo effect by overlaying the audio with a delayed version of itself
         if not ctx.voice_client or not ctx.voice_client.is_playing():
             await ctx.send("I'm not in a voice channel or no audio is playing!")
             return
-        if delay < 1 or delay > 5000:
-            await ctx.send("Delay must be between 1ms and 5000ms.")
-            return
         await self.process_audio(ctx, "echo", lambda audio: audio.overlay(audio - 10, delay=delay))
-        return
+
+    @commands.command(name="deepfry")
+    async def deepfry(self, ctx: commands.Context, value: float):
+        # Increase gain and distortion for a "deep fry" effect
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.send("I'm not in a voice channel or no audio is playing!")
+            return
+        await self.process_audio(ctx, "deepfry", lambda audio: audio + value)
+
+    @commands.command(name="gate")
+    async def gate(self, ctx: commands.Context, threshold: float):
+        # Apply a noise gate by reducing volume above a certain threshold
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.send("I'm not in a voice channel or no audio is playing!")
+            return
+
+        def apply_gate(audio, threshold):
+            return audio - threshold if audio.dBFS > threshold else audio
+
+        await self.process_audio(ctx, "gate", apply_gate, threshold)
+
+    @commands.command(name="fshift")
+    async def fshift(self, ctx: commands.Context, value: float):
+        # Apply a frequency shift to alter pitch
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.send("I'm not in a voice channel or no audio is playing!")
+            return
+        await self.process_audio(ctx, "fshift", lambda audio: audio._spawn(audio.raw_data, overrides={
+            "frame_rate": int(audio.frame_rate + value)}).set_frame_rate(audio.frame_rate))
+
+    @commands.command(name="speed")
+    async def speed(self, ctx: commands.Context, value: float):
+        # Increase the speed (tempo) of the audio
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.send("I'm not in a voice channel or no audio is playing!")
+            return
+        await self.process_audio(ctx, "speed", lambda audio: audio._spawn(audio.raw_data, overrides={
+            "frame_rate": int(audio.frame_rate * value)}).set_frame_rate(audio.frame_rate))
+
+    @commands.command(name="slow")
+    async def slow(self, ctx: commands.Context, value: float):
+        # Decrease the speed (tempo) of the audio
+        if not ctx.voice_client or not ctx.voice_client.is_playing():
+            await ctx.send("I'm not in a voice channel or no audio is playing!")
+            return
+        await self.process_audio(ctx, "slow", lambda audio: audio._spawn(audio.raw_data, overrides={
+            "frame_rate": int(audio.frame_rate / value)}).set_frame_rate(audio.frame_rate))
+
 
 async def setup(bot):
     await bot.add_cog(fx(bot))
+
+
+async def setup(bot):
+    from vc import vc  # Import vc dynamically
+    vc_instance = vc(bot)  # Create an instance of vc
+    await bot.add_cog(fx(bot, vc_instance))
