@@ -3,6 +3,8 @@ from discord import VoiceChannel, Member, VoiceClient
 import asyncio
 from asyncio import run_coroutine_threadsafe
 from discord.ext import commands
+import ffmpeg
+import subprocess #Equivalent to forking a process to create a child process. Mimics ffmpeg cmdline parsing of files
 
 
 #Effects class inherits VoiceChat class, can check all its booleans, queues, etc
@@ -10,18 +12,22 @@ class fx(commands.Cog):
     def __init__(self, bot):
      self.bot = bot
 
+   
 
+        
 
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        return
 
 #EQ class allows for high-low frequency adjustments. eqlow will specifically boost lower frequencies (bass boost, 808s, etc)
     @commands.command(name="eqlow")
     async def eqlow(self, ctx: commands.Context, value):
-       await ctx.send("TESTEFFECTSCOG")
-       return
+        if not ctx.voice_client:
+            await ctx.send("I'm not in a voice channel!")
+            return
+        
+        await ctx.send("EQLOW Activated w/ Value = {}".format(value))
+       
+        
+        return
 
 ##EQ class allows for high-low frequency adjustments. eqlow will specifically boost higher frequencies (treble, snares, hi-hats, claps, most leads, etc)
     @commands.command(name="eqhigh")
