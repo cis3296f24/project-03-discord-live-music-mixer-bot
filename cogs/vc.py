@@ -10,20 +10,13 @@ from typing import List, Optional
 import ffmpeg
 import time
 import traceback
-<<<<<<< HEAD
-from pydub import AudioSegment
-=======
 from pydub import AudioSegment, audio_segment
 from pydub.effects import *
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
 from pydub.playback import play
 import copy
 import numpy as np
 from scipy.fft import fft, fftfreq
-<<<<<<< HEAD
-=======
 import shutil
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
 
 @dataclass
 class FilteredSong:
@@ -119,16 +112,13 @@ class vc(commands.Cog):
         self.joined = False
         self.played = True
         self.id = 0
-<<<<<<< HEAD
-        
-=======
+
         self.start_time = 0
         self.currentpath = ""
         self.ffmpegoptions = {
         'before_options': f'-ss {self.start_time}',  # Seek to the start_time (in seconds)
         'options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
     }
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
         self.ytoptions = {
             'outmpath': './resources',
             'noplaylist': 'True',
@@ -153,131 +143,6 @@ class vc(commands.Cog):
             #await ctx.send(f"AFTER VOLUME CHANGE the AUDIO DBFS = {extracted_audio.dBFS}")
         except Exception as e:
             await ctx.send(f"Error applying volume effect: {str(e)}")
-<<<<<<< HEAD
-
-    @commands.command(name="lowpass")
-    async def fx_lowpass_filter(self, ctx: commands.Context, freq: float):
-        """
-        Analyze frequency content and apply lowpass filter to current audio.
-        freq: cutoff frequency in Hz
-        """
-        try:
-            # 1. Get current audio
-            current_song = self.queue.peek()
-            audio = AudioSegment.from_file(current_song.path, format="mp3").set_channels(1)
-            
-            # 2. Convert to numpy array and normalize
-            samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
-            samples = samples / np.iinfo(np.int16).max  # Normalize to [-1, 1]
-            
-            # 3. Compute FFT
-            fft_result = np.fft.rfft(samples)
-            freqs = np.fft.rfftfreq(len(samples), 1/audio.frame_rate) 
-            
-            # 4. Get magnitude spectrum in dB
-            # 20 and 1e-10 are arbitrary. Want to convert freq component to magnitude and use log scale since human hering is log based
-            magnitudes = 20 * np.log10(np.abs(fft_result) + 1e-10)
-            
-            # 5. Find top 10 frequencies by magnitude
-            peak_indices = np.argsort(magnitudes)[-10:]
-            peaks = [(freqs[i], magnitudes[i]) for i in peak_indices]
-            
-            # 6. Format and send analysis
-            analysis = "Dominant frequencies:\n" + "\n".join(
-                f"Frequency {freq:.1f} Hz: {mag:.1f} dB" 
-                for freq, mag in sorted(peaks, key=lambda x: x[1], reverse=True)
-            )
-            await ctx.send(f"```{analysis}```")
-
-            # 7. Apply lowpass filter if frequency specified
-            if freq > 0:
-                try:
-                    # Create and apply frequency mask
-                    mask = freqs < freq
-                    filtered_fft = fft_result * mask
-
-                    # Convert back to time domain
-                    filtered = np.real(np.fft.irfft(filtered_fft))
-                    filtered = np.int16(filtered * np.iinfo(np.int16).max)
-
-                    # Create filtered audio segment
-                    filtered_audio = AudioSegment(
-                        filtered.tobytes(),
-                        frame_rate=audio.frame_rate,
-                        sample_width=2,
-                        channels=1
-                    )
-
-                    # Use timestamp in filename to ensure uniqueness
-                    timestamp = int(time.time())
-                    temp_path = f"filtered_{timestamp}.mp3"
-                    
-                    # Export with error handling
-                    try:
-                        filtered_audio.export(temp_path, format="mp3")
-                    except Exception as e:
-                        await ctx.send(f"Error exporting filtered audio: {str(e)}")
-                        return
-
-                    # Create new audio source
-                    try:
-                        new_source = discord.FFmpegPCMAudio(
-                            executable="ffmpeg",
-                            source=temp_path,
-                            options="-loglevel error"  # Reduce FFmpeg output
-                        )
-                        
-                        
-                        ctx.voice_client.stop()     # Stop current playback before switching source
-                        await asyncio.sleep(0.5)    # Small delay to ensure clean switch
-                        
-                        # (1) I have FFMPEG executable from PCM Audio & (2) The Path --> (3) Put into queue, play the song
-                        #(4) Utilize the SAME play() global boolean state variables so we ENFORCE that 1 song plays at 1 time & 
-                        #                   so that we recognize the filtered Song as a Song
-                        self.fqueue.put(new_source)
-                        while not self.fqueue.empty():
-                            self.playing = True
-                            self.played = True
-                            ctx.voice_client.play(new_source)
-                            await ctx.send(f"Applied {freq}Hz lowpass filter")
-                            
-                            # Wait for the track to complete
-                        while ctx.voice_client.is_playing() or self.paused:
-                            await asyncio.sleep(1)
-                            
-                        self.playing = False
-                        self.played = False
-                        self.paused = False   
-                        #ctx.voice_client.play(new_source)
-                        #await ctx.send(f"Applied {freq}Hz lowpass filter")
-                        
-                    except Exception as e:
-                        if self.played:
-                            await ctx.send("IGNORE THIS ERROR!My FILTERED audio stream was interrupted!")
-                    
-                    finally:
-                        # Cleanup in finally block to ensure it runs
-                        try:
-                            await asyncio.sleep(1)  # Wait a bit before cleanup
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-                        except Exception as e:
-                            print(f"Cleanup error: {str(e)}")  # Log but don't send to chat
-
-                except Exception as e:
-                    await ctx.send(f"Error in filter application: {str(e)}")
-
-        except Exception as e:
-            await ctx.send(f"Error in audio processing: {str(e)}")
-
-    @commands.command(name="highpass")
-    async def fx_highpass_filter(self, ctx: commands.Context, freq: float):
-        current_song = self.queue.peek()
-        extracted_audio = AudioSegment.from_file(current_song.path, format="mp3")
-        extracted_audio.high_pass_filter(freq)
-        return 1
-=======
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
 
     @commands.command(name="lowpass")
     async def fx_lowpass_filter(self, ctx: commands.Context, freq: float):
@@ -312,8 +177,6 @@ class vc(commands.Cog):
             )
             await ctx.send(f"```{analysis}```")
 
-<<<<<<< HEAD
-=======
             # 7. Apply lowpass filter if frequency specified
             if freq > 0:
                 try:
@@ -455,7 +318,6 @@ class vc(commands.Cog):
                     await ctx.send(f"EQ Error: {str(e)}")
         return
     
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
     @commands.command(name="join")
     async def voice_join(self, ctx: commands.Context):
         if ctx.voice_client:
@@ -491,11 +353,7 @@ class vc(commands.Cog):
             return
             
         if self.playing and not self.paused:
-<<<<<<< HEAD
-            ctx.voice_client.pause()
-=======
             self.channel.pause()
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
             self.paused = True
             await ctx.send("Paused the current track")
         elif self.paused:
@@ -510,11 +368,8 @@ class vc(commands.Cog):
             return
             
         if self.paused:
-<<<<<<< HEAD
             ctx.voice_client.resume()
-=======
             self.channel.resume()
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
             self.paused = False
             await ctx.send("Resumed the track")
         else:
@@ -546,17 +401,11 @@ class vc(commands.Cog):
         with yt_dlp.YoutubeDL(self.ytoptions) as youtube:
             try:
                 songinfo = youtube.extract_info(url, download=True)
-<<<<<<< HEAD
-                songpath = youtube.prepare_filename(songinfo).replace('webm', 'mp3')
-                songpath = "./" + songpath
-                
-=======
                 songpath = youtube.prepare_filename(songinfo)
                 #replace m4a with mp3 for songptah
                 songpath = "./" + songpath.replace('m4a', 'mp3') 
                 songpath = "./" + songpath.replace('webm', 'mp3')
                 self.currentpath = songpath
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
                 if not os.path.exists(songpath):
                     await ctx.send("Failed to locate the downloaded track.")
                     return
@@ -580,21 +429,15 @@ class vc(commands.Cog):
 
                     # Wait for the track to complete
                     while ctx.voice_client.is_playing() or self.paused:
-<<<<<<< HEAD
-=======
                         if not self.paused:
                             self.start_time += 1
                             print(self.start_time)
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
                         await asyncio.sleep(1)
                         
                     self.playing = False
                     self.played = False
                     self.paused = False
-<<<<<<< HEAD
-=======
                     self.runtime = 0
->>>>>>> 3ed3ea141b74a78eee9961c00575a5cc51cd8cda
                     os.remove(current_song.path)
                     
             except Exception as e:
