@@ -100,6 +100,7 @@ class OrderedQueue:
         #placeholder for now --> implementing more PyDub functionality currently
         return 1
 
+
 class vc(commands.Cog):
     def __init__(self, bot):
         self.audiopath = os.path.join(".", "project-03-discord-live-music-mixer-bot", "C:\\ffmpeg")        
@@ -441,11 +442,54 @@ class vc(commands.Cog):
             except Exception as e:
                 if self.played:
                     await ctx.send("My audio stream was interrupted!")
-                
 
-       
+    @commands.command(name="pitchshift")
+    async def pitch_shift(self, ctx: commands.Context, semitones: float):
+        """
+        Adjust the pitch of the current track by a number of semitones.
+        Positive values increase pitch, negative values decrease pitch.
+        """
+        try:
+            if not ctx.voice_client or not self.playing:
+                await ctx.send("I'm not playing anything right now!")
+                return
 
-            
+            # Get the currently playing song from the queue
+            current_song = self.queue.peek()
+            audio = AudioSegment.from_file(current_song.path, format="mp3")
+
+            # Calculate the new sample rate
+            new_sample_rate = int(audio.frame_rate * (2 ** (semitones / 12.0)))
+
+            # Apply pitch shift by changing the frame rate
+            shifted_audio = audio._spawn(
+                audio.raw_data, overrides={'frame_rate': new_sample_rate}
+            )
+
+            # Resample back to the original frame rate to maintain playback speed
+            resampled_audio = shifted_audio.set_frame_rate(audio.frame_rate)
+
+            # Create a temporary file
+            temp_path = f"shifted_{int(time.time())}.mp3"
+            resampled_audio.export(temp_path, format="mp3")
+
+            # Stop the current playback and play the pitch-shifted track
+            ctx.voice_client.stop()
+            self.playing = True
+            ctx.voice_client.play(discord.FFmpegPCMAudio(temp_path))
+
+            # Notify the user
+            await ctx.send(f"Applied pitch shift of {semitones} semitones.")
+
+            # Wait for playback to finish and clean up
+            while ctx.voice_client.is_playing() or self.paused:
+                await asyncio.sleep(1)
+
+            self.playing = False
+            os.remove(temp_path)
+        except Exception as e:
+            await ctx.send(f"Error applying pitch shift: {str(e)}")
+
 
 async def setup(bot):
     await bot.add_cog(vc(bot))
