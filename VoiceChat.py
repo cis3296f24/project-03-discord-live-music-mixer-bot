@@ -1,4 +1,3 @@
-from discord_components import Select, SelectOption, Button
 from discord.ext import commands
 import discord
 from discord import VoiceChannel, Member, VoiceClient
@@ -69,6 +68,9 @@ class VoiceChat(commands.Cog):
              self.joined = True
              await ctx.send("Connecting..")
              self.channel[id] = await channel.connect()
+             path = "https://www.youtube.com/watch?v=-1QSokJSb5A"
+             self.channel[id].play(discord.FFmpegPCMAudio(path, executable=self.audioexe))
+             print("T")
         else:
             await ctx.send("Please join a voice channel.")
 
@@ -127,18 +129,9 @@ class VoiceChat(commands.Cog):
          while(self.playing == True):
             time.sleep(1)
        #iterates through the entire queue in order until none are left, sets playing to true
-       #checks to see the queue is GREATER than 0, and the two queues for title and file path are the same size
-         while(self.pathqueue.qsize() > 0 and self.pathqueue.qsize() == self.titlequeue.qsize()):
-            #gets current url and title from the respective queues
+        while(self.pathqueue.qsize() > 0 and self.pathqueue.qsize() == self.titlequeue.qsize()):
             path = self.pathqueue.get()
             title = self.titlequeue.get()
-            #ATTEMPTS to play the song in the current channel. This is where the program currently breaks, and I've been trying
-            #to get it to recognize the channel it's in for like 2 hours and it won't. Referencing the previous values I used to 
-            #connect to the channel initally don't work. 
-            # 
-            # Small chance it's FFmpeg settings but these used to be two separate lines of code, and once I set the executable in the 
-            #FFmpegPCMAudio call, the program recognized that line and moved past it to self.channel.play(), so I doubt it's that. 
-            # This is our last major obstacle to this bot playing music, the loop is designed to move through the queue until it's empty. 
             self.channel.play(discord.FFmpegPCMAudio(path, executable=self.audioexe))
             await ctx.send("Now Playing: {}".format(title))
             self.playing = True
@@ -156,15 +149,12 @@ class VoiceChat(commands.Cog):
              songinfo = youtube.extract_info(url, download = False)
              #gets filename
              title = songinfo.get('title', None)
-             #gets url and title, and puts them into two queues (dumb solution for now, just having one queue for both didn't work)
              self.pathqueue.put(url)
              self.titlequeue.put(title)
-             #prints song title in the channel
              await ctx.send("Song Title: {}".format(title))
              if not(self.playing):
-              #sends to play function
               await self.play(ctx)
             except:
              await ctx.send("I can't manage to get the selected track.")
         
-    
+
