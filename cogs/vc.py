@@ -444,35 +444,41 @@ class vc(commands.Cog):
                 if self.played:
                     await ctx.send("My audio stream was interrupted!")
 
-    @commands.command(name="pitchshift")
-    async def pitch_shift(self, ctx: commands.Context, semitones: float):
+    @commands.command(name="reverb")
+    async def apply_reverb(self, ctx: commands.Context, delay: int = 1000, decay: float = 0.5):
         """
-        Adjust the pitch of the current track by a number of semitones.
-        Positive values increase pitch, negative values decrease pitch.
+        Applies a reverb effect to the currently playing audio.
         """
         try:
-            # Check if the bot is connected and a song is playing
+            # Ensure that the bot is connected to a voice channel and audio is playing
             if not ctx.voice_client or not self.playing:
-                await ctx.send("I'm not playing anything right now!")
+                await ctx.send("No audio is currently playing!")
                 return
 
-            # Get the currently playing song
-            current_song = self.queue.peek()
+            # Retrieve the currently playing song from the queue
+            try:
+                current_song = self.queue.peek()  # Access the current song from the queue
+            except IndexError:
+                await ctx.send("The queue is empty!")
+                return
 
-            # Get the current playback position (in seconds)
-            current_position = self.start_time
+            # Use the static start time for playback position
+            playback_position = self.start_time
 
-            # Create a temporary output file
-            temp_path = f"shifted_{int(time.time())}.mp3"
+            # Create a temporary file path for the processed audio
+            temp_path = f"reverb_{int(time.time())}.mp3"
 
-            # Use FFmpeg to apply pitch shift and start from the current position
+            # Execute FFmpeg command to apply the reverb effect
             ffmpeg_command = (
-                f"ffmpeg -ss {current_position} -i \"{current_song.path}\" "
-                f"-filter:a \"rubberband=pitch={2 ** (semitones / 12.0)}\" "
-                f"-vn \"{temp_path}\" -y"
+                f"ffmpeg -ss {playback_position:.2f} -i \"{current_song.path}\" "
+                f"-af \"aecho=0.8:0.9:{delay}:{decay}\" "
+                f"-y \"{temp_path}\""
             )
 
-            # Execute the FFmpeg command
+            # Debug log for FFmpeg command
+            print(f"Executing FFmpeg command: {ffmpeg_command}")
+
+            # Run FFmpeg command asynchronously
             process = await asyncio.create_subprocess_shell(
                 ffmpeg_command,
                 stdout=asyncio.subprocess.PIPE,
@@ -480,31 +486,29 @@ class vc(commands.Cog):
             )
             stdout, stderr = await process.communicate()
 
-            # Check for errors in FFmpeg execution
+            # Check for errors during FFmpeg execution
             if process.returncode != 0:
-                await ctx.send(f"Error during pitch shift processing: {stderr.decode('utf-8')}")
+                error_message = stderr.decode('utf-8')
+                print(f"FFmpeg error: {error_message}")
+                await ctx.send(f"Error applying reverb: {error_message}")
                 return
 
-            # Stop the current playback
+            # Stop the current playback and play the processed audio
             ctx.voice_client.stop()
-
-            # Play the pitch-shifted file from the specified position
-            self.playing = True
             ctx.voice_client.play(discord.FFmpegPCMAudio(temp_path))
 
             # Notify the user
-            await ctx.send(f"Applied pitch shift of {semitones} semitones and resumed playback.")
+            await ctx.send(f"Reverb effect applied with delay {delay}ms and decay {decay}.")
 
-            # Wait for playback to finish
+            # Wait for playback to complete
             while ctx.voice_client.is_playing():
                 await asyncio.sleep(1)
 
-            # Cleanup
-            self.playing = False
+            # Clean up temporary file
             os.remove(temp_path)
 
         except Exception as e:
-            await ctx.send(f"Error applying pitch shift: {str(e)}")
+            await ctx.send(f"An error occurred while applying the reverb effect: {str(e)}")
 
 
 async def setup(bot):
