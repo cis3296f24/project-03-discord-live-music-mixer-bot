@@ -27,7 +27,7 @@ class FilteredAudioQueue:
     def __init__(self):
         self.filtered_queue: List[FilteredSong] = []
         self.fcounter = 0
-        self.fcurrent_song: FilteredSong = None
+        self.fcurrent_song: FilteredSong|None = None
 
     def put(self, audio: FilteredSong):
         audio.forder = self.fcounter  
@@ -66,7 +66,7 @@ class OrderedQueue:
     def __init__(self):
         self._queue: List[Song] = []
         self._counter = 0
-        self._current_song: Song = None  
+        self._current_song:Song|None = None  
     def put(self, song: Song):
         song.order = self._counter  # Assign each song an priority upon being put inside the queue
         self._counter += 1          # Song 1 = Priority 0 / Song 2 = Priority 1 / etc...
@@ -98,7 +98,7 @@ class OrderedQueue:
 
     def prepare_ffmpeg_parse(self)->str:
         #placeholder for now --> implementing more PyDub functionality currently
-        return 1
+        return ""
 
 class vc(commands.Cog):
     def __init__(self, bot):
@@ -213,7 +213,6 @@ class vc(commands.Cog):
                         new_source = discord.FFmpegPCMAudio(
                             temp_path, **foptions # Reduce FFmpeg output
                         )
-                        
                         
                         ctx.voice_client.stop()     # Stop current playback before switching source
                         await asyncio.sleep(0.5)    # Small delay to ensure clean switch
