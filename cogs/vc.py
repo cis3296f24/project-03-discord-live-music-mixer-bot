@@ -263,11 +263,16 @@ class vc(commands.Cog):
             await ctx.send(f"Error in audio processing: {str(e)}")
     @commands.command(name="undo")
     async def undo(self, ctx: commands.Context):
+        #sets options for new call to play audio
+        #if original file was somehow removed
+         if not os.path.exists(self.undocall):
+            await ctx.send("Original stream no longer exists!")
          foptions = {'before_options': f'-ss {self.start_time}' }
          new_source = discord.FFmpegPCMAudio(self.undocall, **foptions) # Reduce FFmpeg output
          ctx.voice_client.stop()     # Stop current playback before switching source
          await asyncio.sleep(0.5)
          self.fqueue.put(new_source)
+         #plays original track with archived path, assuming it still exists
          while not self.fqueue.empty():
             self.playing = True
             self.played = True
@@ -285,7 +290,7 @@ class vc(commands.Cog):
          self.paused = False   
          os.remove(self.undocall)
                         
-         return 1
+         return 0
 
     @commands.command(name="highpass")
     async def fx_highpass_filter(self, ctx: commands.Context, freq: float):
@@ -319,12 +324,11 @@ class vc(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error exporting filtered audio: {str(e)}")
             return
-        print("FAJFAF21111")
+        
         foptions = {'before_options': f'-ss {self.start_time}' }
         new_source = discord.FFmpegPCMAudio(
         path, **foptions) # Reduce FFmpeg output
-        print("FFADAFA")
-
+        
         ctx.voice_client.stop()     # Stop current playback before switching source
         await asyncio.sleep(0.5)
         self.fqueue.put(new_source)
@@ -398,12 +402,13 @@ class vc(commands.Cog):
     async def boosthigh(self, ctx: commands.Context, freq: float):
         try:
             current_song = self.queue.peek()
+            #adds filtered audio back to original audiosegment
             audio = AudioSegment.from_file(current_song.path, format="mp3").set_channels(1)
             lowend = high_pass_filter(audio, cutoff=freq)
             newaudio = audio + lowend
 
         except Exception as e:
-                    await ctx.send(f"EQ Error: {str(e)}")
+                    await ctx.send(f"EQ Treble Boost Error: {str(e)}")
         return
         return
 
@@ -413,7 +418,9 @@ class vc(commands.Cog):
     async def normalize(self, ctx: commands.Context):
         current_song = self.queue.peek()
         audio = AudioSegment.from_file(current_song.path, format="mp3").set_channels(1)
+        #call normalize function
         new_audio = normalize(audio)
+        #convert to numpy then back into audiosegment
         samples = np.array(new_audio.get_array_of_samples())
         try:
           normalized = AudioSegment(
@@ -573,12 +580,13 @@ class vc(commands.Cog):
     async def boostlow(self, ctx: commands.Context, freq: float):
         try:
             current_song = self.queue.peek()
+            #adds filtered audio back to original audiosegment
             audio = AudioSegment.from_file(current_song.path, format="mp3").set_channels(1)
             lowend = low_pass_filter(audio, cutoff=freq)
             newaudio = audio+lowend
 
         except Exception as e:
-                    await ctx.send(f"EQ Error: {str(e)}")
+                    await ctx.send(f"EQ bass boost Error: {str(e)}")
         return
     
     @commands.command(name="join")
@@ -689,6 +697,7 @@ class vc(commands.Cog):
                     aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=current_song.path)
                     self.playing = True
                     self.played = True
+                    #keeps track of original file if users want to undo effects
                     self.undocall = current_song.path
                     ctx.voice_client.play(aplay)
                     await ctx.send("Now playing {}".format(current_song.title))
