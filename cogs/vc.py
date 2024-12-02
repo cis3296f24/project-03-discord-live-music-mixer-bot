@@ -104,7 +104,7 @@ class OrderedQueue:
 
 class vc(commands.Cog):
     def __init__(self, bot):
-        self.audiopath = os.path.join("./ffmpeg-2024-07-04-git-03175b587c-full_build/bin/ffmpeg.exe")        
+        self.audiopath = os.path.join("/usr/bin/ffmpeg")        
         self.bot = bot
         self.queue = OrderedQueue()  # custom OrderedQueue class
         self.fqueue = FilteredAudioQueue()
