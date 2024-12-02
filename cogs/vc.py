@@ -21,7 +21,7 @@ import shutil
 @dataclass
 class FilteredSong:
     forder: int
-    fpath: str 
+    fpath: str
 
 class FilteredAudioQueue:
     def __init__(self):
@@ -30,20 +30,20 @@ class FilteredAudioQueue:
         self.fcurrent_song: FilteredSong = None
 
     def put(self, audio: FilteredSong):
-        audio.forder = self.fcounter  
-        self.fcounter += 1          
+        audio.forder = self.fcounter
+        self.fcounter += 1
         self.filtered_queue.append(audio)
-        self.filtered_queue.sort(key=lambda x: x.forder) 
+        self.filtered_queue.sort(key=lambda x: x.forder)
 
 
     def get(self) -> FilteredSong:
         if not self.empty():
-            read_only_copy = copy.deepcopy(self.filtered_queue[0]) 
+            read_only_copy = copy.deepcopy(self.filtered_queue[0])
             self.fcurrent_song = read_only_copy
-            curr_song = self.filtered_queue.pop()                   
+            curr_song = self.filtered_queue.pop()
             return curr_song
         raise IndexError("Queue is empty as a result of a call to get()")
-    
+
 
     def peek(self) -> FilteredSong:
         if self.fcurrent_song is not None:
@@ -53,7 +53,7 @@ class FilteredAudioQueue:
 
     def empty(self) -> bool:
         return len(self.filtered_queue) == 0
-        
+
 
 @dataclass
 class Song:
@@ -66,7 +66,7 @@ class OrderedQueue:
     def __init__(self):
         self._queue: List[Song] = []
         self._counter = 0
-        self._current_song: Song = None  
+        self._current_song: Song = None
     def put(self, song: Song):
         song.order = self._counter  # Assign each song an priority upon being put inside the queue
         self._counter += 1          # Song 1 = Priority 0 / Song 2 = Priority 1 / etc...
@@ -76,9 +76,9 @@ class OrderedQueue:
     def get(self) -> Song:
         if not self.empty():
             ''' "pop()" removes the item from the Queue,so set the global reference using deepcopy first, so no null reference exception is thrown '''
-            read_only_copy = copy.deepcopy(self._queue[0]) 
+            read_only_copy = copy.deepcopy(self._queue[0])
             self._current_song = read_only_copy
-            curr_song = self._queue.pop()                   
+            curr_song = self._queue.pop()
             return curr_song
         raise IndexError("Queue is empty as a result of a call to get()")
 
@@ -87,12 +87,12 @@ class OrderedQueue:
 
     def size(self) -> int:
         return len(self._queue)
-    
+
     def peek(self) -> Song:
         if self._current_song is not None:
             return copy.deepcopy(self._current_song) # Peek() method for Queues is read-only, so we make a copy adhere to that core concept
         raise IndexError("Queue is empty as a result of a call to peek()")
-    
+
     def clear_current(self):
         self._current_song = None
 
@@ -103,7 +103,7 @@ class OrderedQueue:
 
 class vc(commands.Cog):
     def __init__(self, bot):
-        self.audiopath = os.path.join(".", "project-03-discord-live-music-mixer-bot", "C:\\ffmpeg")        
+        self.audiopath = os.path.join(".", "project-03-discord-live-music-mixer-bot", "C:\\ffmpeg")
         self.bot = bot
         self.queue = OrderedQueue()  # custom OrderedQueue class
         self.fqueue = FilteredAudioQueue()
@@ -137,7 +137,7 @@ class vc(commands.Cog):
             current_song = self.queue.peek()
             extracted_audio = AudioSegment.from_file(current_song.path, format="mp3")
             #await ctx.send(f"BEFORE VOLUME CHANGE the AUDIO DBFS = {extracted_audio.dBFS}")
-            assert vol < 1000 
+            assert vol < 1000
             extracted_audio = extracted_audio + vol
             await ctx.send(f"Volume set to: {vol}")
             #await ctx.send(f"AFTER VOLUME CHANGE the AUDIO DBFS = {extracted_audio.dBFS}")
@@ -157,22 +157,22 @@ class vc(commands.Cog):
             # 2. Convert to numpy array and normalize
             samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
             samples = samples / np.iinfo(np.int16).max  # Normalize to [-1, 1]
-            
+
             # 3. Compute FFT
             fft_result = np.fft.rfft(samples)
-            freqs = np.fft.rfftfreq(len(samples), 1/audio.frame_rate) 
-            
+            freqs = np.fft.rfftfreq(len(samples), 1/audio.frame_rate)
+
             # 4. Get magnitude spectrum in dB
             # 20 and 1e-10 are arbitrary. Want to convert freq component to magnitude and use log scale since human hering is log based
             magnitudes = 20 * np.log10(np.abs(fft_result) + 1e-10)
-            
+
             # 5. Find top 10 frequencies by magnitude
             peak_indices = np.argsort(magnitudes)[-10:]
             peaks = [(freqs[i], magnitudes[i]) for i in peak_indices]
-            
+
             # 6. Format and send analysis
             analysis = "Dominant frequencies:\n" + "\n".join(
-                f"Frequency {freq:.1f} Hz: {mag:.1f} dB" 
+                f"Frequency {freq:.1f} Hz: {mag:.1f} dB"
                 for freq, mag in sorted(peaks, key=lambda x: x[1], reverse=True)
             )
             await ctx.send(f"```{analysis}```")
@@ -199,7 +199,7 @@ class vc(commands.Cog):
                     # Use timestamp in filename to ensure uniqueness
                     timestamp = int(time.time())
                     temp_path = f"filtered_{timestamp}.mp3"
-                    
+
                     # Export with error handling
                     try:
                         filtered_audio.export(temp_path, format="mp3")
@@ -213,13 +213,13 @@ class vc(commands.Cog):
                         new_source = discord.FFmpegPCMAudio(
                             temp_path, **foptions # Reduce FFmpeg output
                         )
-                        
-                        
+
+
                         ctx.voice_client.stop()     # Stop current playback before switching source
                         await asyncio.sleep(0.5)    # Small delay to ensure clean switch
-                        
+
                         # (1) I have FFMPEG executable from PCM Audio & (2) The Path --> (3) Put into queue, play the song
-                        #(4) Utilize the SAME play() global boolean state variables so we ENFORCE that 1 song plays at 1 time & 
+                        #(4) Utilize the SAME play() global boolean state variables so we ENFORCE that 1 song plays at 1 time &
                         #                   so that we recognize the filtered Song as a Song
                         self.fqueue.put(new_source)
                         while not self.fqueue.empty():
@@ -227,25 +227,25 @@ class vc(commands.Cog):
                             self.played = True
                             self.channel.play(new_source)
                             await ctx.send(f"Applied {freq}Hz lowpass filter")
-                            
+
                             # Wait for the track to complete
                         while ctx.voice_client.is_playing() or self.paused:
                             if not self.paused:
                                 self.start_time+=1
                                 print(self.start_time)
                             await asyncio.sleep(1)
-                            
+
                         self.playing = False
                         self.played = False
-                        self.paused = False   
+                        self.paused = False
                         os.remove(temp_path)
                         #ctx.voice_client.play(new_source)
                         #await ctx.send(f"Applied {freq}Hz lowpass filter")
-                        
+
                     except Exception as e:
                         if self.played:
                             await ctx.send("IGNORE THIS ERROR!My FILTERED audio stream was interrupted!")
-                    
+
                     finally:
                         # Cleanup in finally block to ensure it runs
                         try:
@@ -269,7 +269,7 @@ class vc(commands.Cog):
 
         new_audio = high_pass_filter(audio, cutoff = freq)
 
-       
+
         print(type(new_audio))
         print("FAJFAF21111")
         timestamp = int(time.time())
@@ -295,12 +295,12 @@ class vc(commands.Cog):
                 self.start_time+=1
                 print(self.start_time)
                 await asyncio.sleep(1)
-                            
+
         self.playing = False
         self.played = False
-        self.paused = False   
+        self.paused = False
         os.remove(path)
-                        
+
         return 1
 
     @commands.command(name="highend")
@@ -317,7 +317,7 @@ class vc(commands.Cog):
         except Exception as e:
                     await ctx.send(f"EQ Error: {str(e)}")
         return
-    
+
     @commands.command(name="join")
     async def voice_join(self, ctx: commands.Context):
         if ctx.voice_client:
@@ -351,7 +351,7 @@ class vc(commands.Cog):
         if not ctx.voice_client:
             await ctx.send("I'm not in a voice channel!")
             return
-            
+
         if self.playing and not self.paused:
             self.channel.pause()
             self.paused = True
@@ -366,7 +366,7 @@ class vc(commands.Cog):
         if not ctx.voice_client:
             await ctx.send("I'm not in a voice channel!")
             return
-            
+
         if self.paused:
             self.channel.resume()
             self.paused = False
@@ -379,11 +379,11 @@ class vc(commands.Cog):
         if not self.playing:
             await ctx.send("Nothing is playing right now!")
             return
-            
+
         ctx.voice_client.stop()
         self.playing = False
         self.paused = False
-        
+
         if self.queue.empty():
             await ctx.send("The queue is now empty.")
             return
@@ -396,19 +396,19 @@ class vc(commands.Cog):
         if not self.joined:
             await ctx.send("I must be in a voice channel to play music!")
             return
-            
+
         with yt_dlp.YoutubeDL(self.ytoptions) as youtube:
             try:
                 songinfo = youtube.extract_info(url, download=True)
                 songpath = youtube.prepare_filename(songinfo)
                 #replace m4a with mp3 for songptah
-                songpath = "./" + songpath.replace('m4a', 'mp3') 
+                songpath = "./" + songpath.replace('m4a', 'mp3')
                 songpath = "./" + songpath.replace('webm', 'mp3')
                 self.currentpath = songpath
                 if not os.path.exists(songpath):
                     await ctx.send("Failed to locate the downloaded track.")
                     return
-                
+
                 title = songinfo.get('title', None)
                 song = Song(title, songpath, url, 0)  # Order will be set by OrderedQueue
                 self.queue.put(song)
@@ -432,13 +432,13 @@ class vc(commands.Cog):
                             self.start_time += 1
                             print(self.start_time)
                         await asyncio.sleep(1)
-                        
+
                     self.playing = False
                     self.played = False
                     self.paused = False
                     self.runtime = 0
                     os.remove(current_song.path)
-                    
+
             except Exception as e:
                 if self.played:
                     await ctx.send("My audio stream was interrupted!")
@@ -456,22 +456,29 @@ class vc(commands.Cog):
 
             # Get the currently playing song from the queue
             current_song = self.queue.peek()
-            audio = AudioSegment.from_file(current_song.path, format="mp3")
 
-            # Calculate the new sample rate
-            new_sample_rate = int(audio.frame_rate * (2 ** (semitones / 12.0)))
+            # Create temporary output file
+            temp_path = f"shifted_{int(time.time())}.mp3"
 
-            # Apply pitch shift by changing the frame rate
-            shifted_audio = audio._spawn(
-                audio.raw_data, overrides={'frame_rate': new_sample_rate}
+            # Use FFmpeg with 'rubberband' filter to adjust pitch without speed change
+            ffmpeg_command = (
+                f"ffmpeg -i \"{current_song.path}\" "
+                f"-filter:a \"rubberband=pitch={2 ** (semitones / 12.0)}\" "
+                f"-vn \"{temp_path}\" -y"
             )
 
-            # Resample back to the original frame rate to maintain playback speed
-            resampled_audio = shifted_audio.set_frame_rate(audio.frame_rate)
+            # Execute the FFmpeg command
+            process = await asyncio.create_subprocess_shell(
+                ffmpeg_command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
 
-            # Create a temporary file
-            temp_path = f"shifted_{int(time.time())}.mp3"
-            resampled_audio.export(temp_path, format="mp3")
+            # Check for errors in FFmpeg execution
+            if process.returncode != 0:
+                await ctx.send(f"Error during pitch shift processing: {stderr.decode('utf-8')}")
+                return
 
             # Stop the current playback and play the pitch-shifted track
             ctx.voice_client.stop()
