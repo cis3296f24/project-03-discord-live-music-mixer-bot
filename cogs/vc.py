@@ -16,7 +16,9 @@ from pydub.playback import play
 import copy
 import numpy as np
 from scipy.fft import fft, fftfreq
+from pydub.utils import which
 import shutil
+
 
 @dataclass
 class FilteredSong:
@@ -102,7 +104,7 @@ class OrderedQueue:
 
 class vc(commands.Cog):
     def __init__(self, bot):
-        self.audiopath = os.path.join(".", "project-03-discord-live-music-mixer-bot", "C:\\ffmpeg")        
+        self.audiopath = os.path.join("./ffmpeg-2024-07-04-git-03175b587c-full_build/bin/ffmpeg.exe")        
         self.bot = bot
         self.queue = OrderedQueue()  # custom OrderedQueue class
         self.fqueue = FilteredAudioQueue()
@@ -126,7 +128,7 @@ class vc(commands.Cog):
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3'
             }],
-            '--ffmpeg-location': "C:\\ffmpeg"
+            '--ffmpeg-location': "./ffmpeg-2024-07-04-git-03175b587c-full_build/bin"
         }
 
 
@@ -263,24 +265,42 @@ class vc(commands.Cog):
     @commands.command(name="highpass")
     async def fx_highpass_filter(self, ctx: commands.Context, freq: float):
 
+        #grab audio file
         audio = AudioSegment.from_file(self.currentpath, format ="mp3")
-        print("FFAF")
+        #create new HPF version
+        try:
+         new_audio = high_pass_filter(audio, cutoff = freq)
+        except Exception as e:
+            await ctx.send(f"Error exporting filtered audio: {str(e)}")
+        #turn into numpy array
+        samples = np.array(new_audio.get_array_of_samples())
+        #convert BACK into an AudioSegment
+        try:
+         filtered_audio = AudioSegment(
+          samples.tobytes(),
+          frame_rate=audio.frame_rate,
+          sample_width=audio.sample_width,
+          channels=audio.channels
+         )
+        except Exception as e:
+            await ctx.send(f"Error exporting filtered audio: {str(e)}")
 
-        new_audio = high_pass_filter(audio, cutoff = freq)
-
-       
-        print(type(new_audio))
-        print("FAJFAF21111")
         timestamp = int(time.time())
-        temp_path = f"filtered_{timestamp}.mp3"
-        path = new_audio.export(temp_path, format="mp3")
+        #Set title of file to be unique based on int time
+        path = f"filtered_{timestamp}.mp3"
+        try:
+        #FINALLY export that last object as a file .mp3
+            filtered_audio.export(path, format="mp3")
+        except Exception as e:
+            await ctx.send(f"Error exporting filtered audio: {str(e)}")
+            return
         print("FAJFAF21111")
         foptions = {'before_options': f'-ss {self.start_time}' }
         new_source = discord.FFmpegPCMAudio(
         path, **foptions) # Reduce FFmpeg output
         print("FFADAFA")
 
-        ctx.voice_client.stop()     # Stop current playback before switching source
+        ctx.voice_client.pause()     # Stop current playback before switching source
         await asyncio.sleep(0.5)
         self.fqueue.put(new_source)
         while not self.fqueue.empty():
@@ -302,8 +322,63 @@ class vc(commands.Cog):
                         
         return 1
 
+    @commands.command(name="pitchshift")
+    async def pitch_shift(self, ctx: commands.Context, semitones: float):
+        """
+        Adjust the pitch of the current track by a number of semitones.
+        Positive values increase pitch, negative values decrease pitch.
+        """
+        try:
+            if not ctx.voice_client or not self.playing:
+                await ctx.send("I'm not playing anything right now!")
+                return
+            # Get the currently playing song from the queue
+            current_song = self.queue.peek()
+            audio = AudioSegment.from_file(current_song.path, format="mp3")
+
+            # Calculate the new sample rate
+            new_sample_rate = int(audio.frame_rate * (2 ** (semitones / 12.0)))
+
+            # Apply pitch shift by changing the frame rate
+            shifted_audio = audio.spawn(
+                audio.raw_data, overrides={'frame_rate': new_sample_rate}
+            )
+
+            # Resample back to the original frame rate to maintain playback speed
+            resampled_audio = shifted_audio.set_frame_rate(audio.frame_rate)
+
+            # Create a temporary file
+            temp_path = f"shifted{int(time.time())}.mp3"
+            resampled_audio.export(temp_path, format="mp3")
+
+            # Stop the current playback and play the pitch-shifted track
+            ctx.voice_client.stop()
+            self.playing = True
+            ctx.voice_client.play(discord.FFmpegPCMAudio(temp_path))
+
+            # Notify the user
+            await ctx.send(f"Applied pitch shift of {semitones} semitones.")
+
+            # Wait for playback to finish and clean up
+            while ctx.voice_client.is_playing() or self.paused:
+                await asyncio.sleep(1)
+
+            self.playing = False
+            os.remove(temp_path)
+        except Exception as e:
+            await ctx.send(f"Error applying pitch shift: {str(e)}")
+
+
     @commands.command(name="highend")
     async def boosthigh(self, ctx: commands.Context, freq: float):
+        try:
+            current_song = self.queue.peek()
+            audio = AudioSegment.from_file(current_song.path, format="mp3").set_channels(1)
+            lowend = low_pass_filter(audio, cutoff=150)
+
+        except Exception as e:
+                    await ctx.send(f"EQ Error: {str(e)}")
+        return
         return
 
     @commands.command(name="lowend")
@@ -403,6 +478,8 @@ class vc(commands.Cog):
                 #replace m4a with mp3 for songptah
                 songpath = "./" + songpath.replace('m4a', 'mp3') 
                 songpath = "./" + songpath.replace('webm', 'mp3')
+                ffpath = which("ffmpeg")
+                print(ffpath)
                 self.currentpath = songpath
                 if not os.path.exists(songpath):
                     await ctx.send("Failed to locate the downloaded track.")
