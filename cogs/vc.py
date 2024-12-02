@@ -17,6 +17,7 @@ import copy
 import numpy as np
 from scipy.fft import fft, fftfreq
 import shutil
+import re
 
 @dataclass
 class FilteredSong:
@@ -450,19 +451,23 @@ class vc(commands.Cog):
         Positive values increase pitch, negative values decrease pitch.
         """
         try:
+            # Check if the bot is connected and a song is playing
             if not ctx.voice_client or not self.playing:
                 await ctx.send("I'm not playing anything right now!")
                 return
 
-            # Get the currently playing song from the queue
+            # Get the currently playing song
             current_song = self.queue.peek()
 
-            # Create temporary output file
+            # Get the current playback position (in seconds)
+            current_position = self.start_time
+
+            # Create a temporary output file
             temp_path = f"shifted_{int(time.time())}.mp3"
 
-            # Use FFmpeg with 'rubberband' filter to adjust pitch without speed change
+            # Use FFmpeg to apply pitch shift and start from the current position
             ffmpeg_command = (
-                f"ffmpeg -i \"{current_song.path}\" "
+                f"ffmpeg -ss {current_position} -i \"{current_song.path}\" "
                 f"-filter:a \"rubberband=pitch={2 ** (semitones / 12.0)}\" "
                 f"-vn \"{temp_path}\" -y"
             )
@@ -480,20 +485,24 @@ class vc(commands.Cog):
                 await ctx.send(f"Error during pitch shift processing: {stderr.decode('utf-8')}")
                 return
 
-            # Stop the current playback and play the pitch-shifted track
+            # Stop the current playback
             ctx.voice_client.stop()
+
+            # Play the pitch-shifted file from the specified position
             self.playing = True
             ctx.voice_client.play(discord.FFmpegPCMAudio(temp_path))
 
             # Notify the user
-            await ctx.send(f"Applied pitch shift of {semitones} semitones.")
+            await ctx.send(f"Applied pitch shift of {semitones} semitones and resumed playback.")
 
-            # Wait for playback to finish and clean up
-            while ctx.voice_client.is_playing() or self.paused:
+            # Wait for playback to finish
+            while ctx.voice_client.is_playing():
                 await asyncio.sleep(1)
 
+            # Cleanup
             self.playing = False
             os.remove(temp_path)
+
         except Exception as e:
             await ctx.send(f"Error applying pitch shift: {str(e)}")
 
