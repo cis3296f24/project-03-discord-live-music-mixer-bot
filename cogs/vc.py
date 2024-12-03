@@ -369,6 +369,42 @@ class vc(commands.Cog):
         """
         return 1
 
+    @commands.command(name="tempo")
+    async def speed(self, ctx: commands.Context, val: float):
+        #grab audio file
+        audio = AudioSegment.from_file(self.currentpath, format ="mp3")
+        #create new tempo adjust
+        try:
+         new_audio = speedup(audio, playback_speed=val)
+        except Exception as e:
+            await ctx.send(f"Error creating tempo adjustment from AudioSegment: {str(e)}")
+        #turn into numpy array
+        samples = np.array(new_audio.get_array_of_samples())
+        #convert BACK into an AudioSegment
+        try:
+         speed_audio = AudioSegment(
+          samples.tobytes(),
+          frame_rate=audio.frame_rate,
+          sample_width=audio.sample_width,
+          channels=audio.channels
+         )
+        except Exception as e:
+            await ctx.send(f"Error exporting tempo adjustment: {str(e)}")
+
+        timestamp = int(time.time())
+        #Set title of file to be unique based on int time
+        path = f"tempo_{timestamp}.mp3"
+        try:
+        #FINALLY export that last object as a file .mp3
+            speed_audio.export(path, format="mp3")
+        except Exception as e:
+            await ctx.send(f"Error exporting tempo adjustment: {str(e)}")
+            return
+        
+        if await self.applyFX(ctx, path) > 0:
+            await ctx.send(f"Applied Tempo Adjustment")
+        return
+    
     @commands.command(name="pitchshift")
     async def pitch_shift(self, ctx: commands.Context, semitones: float):
         """
