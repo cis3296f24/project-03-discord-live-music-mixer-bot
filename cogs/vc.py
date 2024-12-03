@@ -60,7 +60,10 @@ class FilteredAudioQueue:
 @dataclass
 class Song:
     title: str
+    # audio path
     path: str
+    # normal audio path for revert effects
+    norm_path: str
     url: str
     order: int  # to maintain assigned song priorities inside the queue
 
@@ -75,13 +78,18 @@ class OrderedQueue:
         self._queue.append(song)
         self._queue.sort(key=lambda x: x.order)  # Keep songs sorted by their assigned order. Upon inserting into queue sorts the new queue by order
 
+    def push(self, song:Song):
+        song.order = 0
+        for song in self._queue:
+            song.order += 1
+        self._counter += 1
+        self._queue.insert(0, song)
+
     def get(self) -> Song:
         if not self.empty():
             ''' "pop()" removes the item from the Queue,so set the global reference using deepcopy first, so no null reference exception is thrown '''
-            read_only_copy = copy.deepcopy(self._queue[0]) 
-            self._current_song = read_only_copy
-            curr_song = self._queue.pop()                   
-            return curr_song
+            self._current_song  = copy.deepcopy(self._queue[0]) 
+            return self._queue.pop()                   
         raise IndexError("Queue is empty as a result of a call to get()")
 
     def empty(self) -> bool:
@@ -122,14 +130,14 @@ class vc(commands.Cog):
         'options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
     }
         self.ytoptions = {
-            'outmpath': './resources',
+            'outtmpl': './rsc/%(title)s.%(ext)s',
             'noplaylist': 'True',
             'format': 'bestaudio',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3'
             }],
-            '--ffmpeg-location': "./ffmpeg-2024-07-04-git-03175b587c-full_build/bin"
+            '--ffmpeg-location': "/bin/ffmpeg"
         }
 
 
@@ -209,6 +217,10 @@ class vc(commands.Cog):
                         await ctx.send(f"Error exporting filtered audio: {str(e)}")
                         return
 
+                    if await self.applyFX(ctx, temp_path) > 0:
+                        await ctx.send(f"Applied {freq}Hz lowpass filter")   
+
+                    """
                     # Create new audio source
                     try:
                         foptions = {'before_options': f'-ss {self.start_time}' }
@@ -241,8 +253,7 @@ class vc(commands.Cog):
                         self.paused = False   
                         os.remove(temp_path)
                         #ctx.voice_client.play(new_source)
-                        #await ctx.send(f"Applied {freq}Hz lowpass filter")
-                        
+                        #await ctx.send(f"Applied {freq}Hz lowpass filter")   
                     except Exception as e:
                         if self.played:
                             await ctx.send("IGNORE THIS ERROR!My FILTERED audio stream was interrupted!")
@@ -256,41 +267,45 @@ class vc(commands.Cog):
                         except Exception as e:
                             print(f"Cleanup error: {str(e)}")  # Log but don't send to chat
 
+                    """
                 except Exception as e:
                     await ctx.send(f"Error in filter application: {str(e)}")
 
         except Exception as e:
             await ctx.send(f"Error in audio processing: {str(e)}")
+
+
     @commands.command(name="undo")
     async def undo(self, ctx: commands.Context):
+        current_song = self.queue.peek()
         #sets options for new call to play audio
         #if original file was somehow removed
-         if not os.path.exists(self.undocall):
+        if not os.path.exists(current_song.norm_path):
             await ctx.send("Original stream no longer exists!")
-         foptions = {'before_options': f'-ss {self.start_time}' }
-         new_source = discord.FFmpegPCMAudio(self.undocall, **foptions) # Reduce FFmpeg output
-         ctx.voice_client.stop()     # Stop current playback before switching source
-         await asyncio.sleep(0.5)
-         self.fqueue.put(new_source)
-         #plays original track with archived path, assuming it still exists
-         while not self.fqueue.empty():
-            self.playing = True
-            self.played = True
-            self.channel.play(new_source)
-            await ctx.send(f"Effect(s) successfully undone, returned to original track")
+        foptions = {'before_options': f'-ss {self.start_time}' }
+        new_source = discord.FFmpegPCMAudio(self.undocall, **foptions) # Reduce FFmpeg output
+        ctx.voice_client.stop()     # Stop current playback before switching source
+        await asyncio.sleep(0.5)
+        self.fqueue.put(new_source)
+        #plays original track with archived path, assuming it still exists
+        while not self.fqueue.empty():
+           self.playing = True
+           self.played = True
+           self.channel.play(new_source)
+           await ctx.send(f"Effect(s) successfully undone, returned to original track")
 
-         while ctx.voice_client.is_playing():
+        while ctx.voice_client.is_playing():
             if not self.paused:
                 self.start_time+=1
                 print(self.start_time)
-                await asyncio.sleep(1)
+            await asyncio.sleep(1)
                             
-         self.playing = False
-         self.played = False
-         self.paused = False   
-         os.remove(self.undocall)
+        self.playing = False
+        self.played = False
+        self.paused = False   
+        os.remove(self.undocall)
                         
-         return 0
+        return 0
 
     @commands.command(name="highpass")
     async def fx_highpass_filter(self, ctx: commands.Context, freq: float):
@@ -325,6 +340,9 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting filtered audio: {str(e)}")
             return
         
+        if await self.applyFX(ctx, path) > 0:
+            await ctx.send(f"Applied {freq}Hz highpass filter")
+        """
         foptions = {'before_options': f'-ss {self.start_time}' }
         new_source = discord.FFmpegPCMAudio(
         path, **foptions) # Reduce FFmpeg output
@@ -347,8 +365,8 @@ class vc(commands.Cog):
         self.playing = False
         self.played = False
         self.paused = False   
-        os.remove(path)
-                        
+        os.remove(path)               
+        """
         return 1
 
     @commands.command(name="pitchshift")
@@ -380,6 +398,10 @@ class vc(commands.Cog):
             temp_path = f"shifted{int(time.time())}.mp3"
             resampled_audio.export(temp_path, format="mp3")
 
+            if await self.applyFX(ctx, temp_path) > 0:
+                await ctx.send(f"Applied pitch shift of {semitones} semitones.")
+
+            """
             # Stop the current playback and play the pitch-shifted track
             ctx.voice_client.stop()
             self.playing = True
@@ -394,6 +416,7 @@ class vc(commands.Cog):
 
             self.playing = False
             os.remove(temp_path)
+            """
         except Exception as e:
             await ctx.send(f"Error applying pitch shift: {str(e)}")
 
@@ -409,7 +432,6 @@ class vc(commands.Cog):
 
         except Exception as e:
                     await ctx.send(f"EQ Treble Boost Error: {str(e)}")
-        return
         return
 
 
@@ -440,6 +462,10 @@ class vc(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error exporting normalized audio: {str(e)}")
             return
+
+        if await self.applyFX(ctx, path) > 0:
+            await ctx.send(f"Normalized Audio")
+        """
         foptions = {'before_options': f'-ss {self.start_time}' }
         new_source = discord.FFmpegPCMAudio(
         path, **foptions) # Reduce FFmpeg output
@@ -463,7 +489,7 @@ class vc(commands.Cog):
         self.played = False
         self.paused = False   
         os.remove(path)
-
+        """
 
         return
 
@@ -496,6 +522,11 @@ class vc(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error exporting panned audio: {str(e)}")
             return
+
+        if await self.applyFX(ctx, path) > 0:
+            await ctx.send(f"Applied {val} step audio panning")
+
+        """
         foptions = {'before_options': f'-ss {self.start_time}' }
         new_source = discord.FFmpegPCMAudio(
         path, **foptions) # Reduce FFmpeg output
@@ -519,12 +550,9 @@ class vc(commands.Cog):
         self.played = False
         self.paused = False   
         os.remove(path)
-
+        """
         return
     
-
-
-
     @commands.command(name="gain")
     async def gain(self, ctx: commands.Context, freq: float):
         current_song = self.queue.peek()
@@ -543,37 +571,33 @@ class vc(commands.Cog):
 
         timestamp = int(time.time())
         #Set title of file to be unique based on int time
-        path = f"gain_{timestamp}.mp3"
+        path = f"./rsc/gain_{timestamp}.mp3"
         try:
         #FINALLY export that last object as a file .mp3
             gain_audio.export(path, format="mp3")
         except Exception as e:
             await ctx.send(f"Error applying gain: {str(e)}")
             return
+
+        if await self.applyFX(ctx, path) > 0:
+            await ctx.send(f"Applied {freq}step gain")
+
+        """
         foptions = {'before_options': f'-ss {self.start_time}' }
         new_source = discord.FFmpegPCMAudio(
         path, **foptions) # Reduce FFmpeg output
-
+        self.paused = True
         ctx.voice_client.stop()     # Stop current playback before switching source
         await asyncio.sleep(0.5)
-        self.fqueue.put(new_source)
-        while not self.fqueue.empty():
+        if new_source != None:
             self.playing = True
             self.played = True
+            self.paused = False
             self.channel.play(new_source)
+            if self.queue._current_song != None:
+                self.queue._current_song.path = path
             await ctx.send(f"Applied {freq}step gain")
-
-        while ctx.voice_client.is_playing():
-            if not self.paused:
-                self.start_time+=1
-                print(self.start_time)
-                await asyncio.sleep(1)
-                            
-        self.playing = False
-        self.played = False
-        self.paused = False   
-        os.remove(path)
-
+        """
         return
 
     @commands.command(name="lowend")
@@ -673,18 +697,15 @@ class vc(commands.Cog):
             try:
                 songinfo = youtube.extract_info(url, download=True)
                 songpath = youtube.prepare_filename(songinfo)
-                #replace m4a with mp3 for songptah
+                ffpath = which("ffmpeg")
                 songpath = "./" + songpath.replace('m4a', 'mp3') 
                 songpath = "./" + songpath.replace('webm', 'mp3')
-                ffpath = which("ffmpeg")
-                print(ffpath)
                 self.currentpath = songpath
                 if not os.path.exists(songpath):
                     await ctx.send("Failed to locate the downloaded track.")
                     return
-                
                 title = songinfo.get('title', None)
-                song = Song(title, songpath, url, 0)  # Order will be set by OrderedQueue
+                song = Song(title, songpath, songpath, url, 0)  # Order will be set by OrderedQueue
                 self.queue.put(song)
                 await ctx.send("Song Title: {}".format(title))
 
@@ -694,6 +715,7 @@ class vc(commands.Cog):
 
                 while not self.queue.empty():
                     current_song = self.queue.get()
+                    self.start_time = 0
                     aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=current_song.path)
                     self.playing = True
                     self.played = True
@@ -718,6 +740,23 @@ class vc(commands.Cog):
             except Exception as e:
                 if self.played:
                     await ctx.send("My audio stream was interrupted!")
+
+    async def applyFX(self, ctx, path):
+        foptions = {'before_options': f'-ss {self.start_time}' }
+        new_source = discord.FFmpegPCMAudio(
+        path, **foptions) # Reduce FFmpeg output
+        self.paused = True
+        ctx.voice_client.stop()     # Stop current playback before switching source
+        await asyncio.sleep(0.5)
+        if new_source != None:
+            self.playing = True
+            self.played = True
+            self.paused = False
+            self.channel.play(new_source)
+            if self.queue._current_song != None:
+                self.queue._current_song.path = path
+        return 1
+
                 
 
        
