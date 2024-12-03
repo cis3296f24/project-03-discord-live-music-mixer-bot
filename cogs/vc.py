@@ -393,7 +393,7 @@ class vc(commands.Cog):
 
             # Resample back to the original frame rate to maintain playback speed
             resampled_audio = shifted_audio.set_frame_rate(audio.frame_rate)
-
+            # T
             # Create a temporary file
             temp_path = f"shifted{int(time.time())}.mp3"
             resampled_audio.export(temp_path, format="mp3")
