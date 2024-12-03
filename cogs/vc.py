@@ -370,7 +370,7 @@ class vc(commands.Cog):
         return 1
 
     @commands.command(name="tempo")
-    async def speed(self, ctx: commands.Context, val: float):
+    async def tempo(self, ctx: commands.Context, val: float):
         #grab audio file
         audio = AudioSegment.from_file(self.currentpath, format ="mp3")
         #create new tempo adjust
@@ -423,7 +423,7 @@ class vc(commands.Cog):
             new_sample_rate = int(audio.frame_rate * (2 ** (semitones / 12.0)))
 
             # Apply pitch shift by changing the frame rate
-            shifted_audio = audio.spawn(
+            shifted_audio = audio._spawn(
                 audio.raw_data, overrides={'frame_rate': new_sample_rate}
             )
 
@@ -485,11 +485,11 @@ class vc(commands.Cog):
         #FINALLY export that last object as a file .mp3
             filtered_audio.export(path, format="mp3")
         except Exception as e:
-            await ctx.send(f"Error exporting filtered audio: {str(e)}")
+            await ctx.send(f"Error exporting treble boosted audio: {str(e)}")
             return
         
         if await self.applyFX(ctx, path) > 0:
-            await ctx.send(f"Applied {freq}Hz highpass filter")
+            await ctx.send(f"Applied {freq}Hz treble boost filter")
         return
 
 
@@ -512,40 +512,59 @@ class vc(commands.Cog):
         if not os.path.exists(current_song.path):
             await ctx.send("The audio file could not be found. Please check the queue and try again.")
             return
-
+        audio = AudioSegment.from_file(current_song.path, format="mp3").set_channels(1)
         current_position = self.start_time
         temp_path = f"reverb{int(time.time())}.mp3"
-
-        #ffmpeg_command = (f"ffmpeg -ss {current_position} -i "{current_song.path}" "f"-filter:a "aecho=0.8:0.9:{delay:.0f}:{decay:.2f}" "f"-vn "{temp_path}" -y")
-
-        process = await asyncio.create_subprocess_shell(
-            #ffmpeg_command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-
-        if process.returncode != 0:
-            error_message = stderr.decode('utf-8')[:500]
-            await ctx.send(f"Error during reverb processing:\n{error_message}")
+        for i in range(3):
+            echo = audio - (decay * (i+1) * 10)
+            echo = AudioSegment.silent(duration = i * delay)
+            finalreverb = audio.overlay(echo)
+        exportreverb = audio.overlay(finalreverb)
+        exportreverb = normalize(exportreverb)
+        exportreverb -= 4
+        timestamp = int(time.time())
+        path = f"reverb_{timestamp}.mp3"
+        try:
+        #FINALLY export that last object as a file .mp3
+            exportreverb.export(path, format="mp3")
+        except Exception as e:
+            await ctx.send(f"Error exporting treble boosted audio: {str(e)}")
             return
-
-        ctx.voice_client.stop()
-        self.playing = True
-        ctx.voice_client.play(discord.FFmpegPCMAudio(temp_path))
-
-        await ctx.send(f"Reverb effect applied successfully with delay {delay}ms and decay {decay}. Playback has resumed.")
-
-        while ctx.voice_client.is_playing():
-            await asyncio.sleep(1)
-
-        self.playing = False
-        os.remove(temp_path)
+        
+        if await self.applyFX(ctx, path) > 0:
+            await ctx.send(f"Applied reverb successfully")
+        return
 
       except Exception as e:
         error_message = str(e)[:500]
         await ctx.send(f"An unexpected error occurred:\n{error_message}")
 
+    @commands.command(name="deepfry")
+    async def deepfry(self, ctx: commands.Context):
+        current_song = self.queue.peek()
+        audio = AudioSegment.from_file(current_song.path, format="mp3").set_channels(1)
+        fry = audio + 45
+        samples = np.array(fry.get_array_of_samples())
+        try:
+          fried_audio = AudioSegment(
+          samples.tobytes(),
+          frame_rate=audio.frame_rate,
+          sample_width=audio.sample_width,
+          channels=audio.channels
+         )
+        except Exception as e:
+            await ctx.send(f"Error exporting panned audio: {str(e)}")
+        timestamp = int(time.time())
+        path = f"pan_{timestamp}.mp3"
+        try:
+        #FINALLY export that last object as a file .mp3
+            fried_audio.export(path, format="mp3")
+        except Exception as e:
+            await ctx.send(f"Error exporting panned audio: {str(e)}")
+            return
+
+        if await self.applyFX(ctx, path) > 0:
+            await ctx.send(f"Applied deep fry")
 
     @commands.command(name="normalize")
     async def normalize(self, ctx: commands.Context):
@@ -666,6 +685,9 @@ class vc(commands.Cog):
     
     @commands.command(name="gain")
     async def gain(self, ctx: commands.Context, freq: float):
+        if(freq > 10):
+            await ctx.send("Gain levels too high, your audio will clip!")
+            return
         current_song = self.queue.peek()
         audio = AudioSegment.from_file(current_song.path, format="mp3").set_channels(1)
         new_audio = audio + freq
@@ -739,11 +761,11 @@ class vc(commands.Cog):
         #FINALLY export that last object as a file .mp3
             filtered_audio.export(path, format="mp3")
         except Exception as e:
-            await ctx.send(f"Error exporting filtered audio: {str(e)}")
+            await ctx.send(f"Error exporting bass boosted audio: {str(e)}")
             return
         
         if await self.applyFX(ctx, path) > 0:
-            await ctx.send(f"Applied {freq}Hz highpass filter")
+            await ctx.send(f"Applied {freq}Hz bass boost")
         return
     
     @commands.command(name="join")
@@ -886,8 +908,13 @@ class vc(commands.Cog):
             self.played = True
             self.paused = False
             self.channel.play(new_source)
+            await ctx.send("Effect applied successfully")
             if self.queue._current_song != None:
                 self.queue._current_song.path = path
+            while(self.playing):
+                self.start_time+=1
+                await asyncio.sleep(1)
+            os.remove(path)
         return 1
 
                 
