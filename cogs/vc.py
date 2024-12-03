@@ -444,6 +444,70 @@ class vc(commands.Cog):
                 if self.played:
                     await ctx.send("My audio stream was interrupted!")
 
+    @commands.command(name="pitchshift")
+    async def pitch_shift(self, ctx: commands.Context, semitones: float):
+        """
+        Adjust the pitch of the current track by a number of semitones.
+        Positive values increase pitch, negative values decrease pitch.
+        """
+        try:
+            # Check if the bot is connected to a voice channel and a song is currently playing
+            if not ctx.voice_client or not self.playing:
+                await ctx.send("I'm not currently playing anything!")
+                return
+
+            # Get the currently playing song
+            current_song = self.queue.peek()
+
+            # Get the current playback position in seconds
+            current_position = self.start_time
+
+            # Create a temporary output file to save the pitch-shifted track
+            temp_path = f"shifted_{int(time.time())}.mp3"
+
+            # Use FFmpeg to apply pitch shift
+            ffmpeg_command = (
+                f"ffmpeg -ss {current_position} -i \"{current_song.path}\" "
+                f"-filter:a \"rubberband=pitch={2 ** (semitones / 12.0)}\" "
+                f"-vn \"{temp_path}\" -y"
+            )
+
+            # Execute the FFmpeg command asynchronously
+            process = await asyncio.create_subprocess_shell(
+                ffmpeg_command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+
+            # Check if FFmpeg executed successfully
+            if process.returncode != 0:
+                await ctx.send(f"Pitch shift processing failed: {stderr.decode('utf-8')}")
+                return
+
+            # Stop the current playback
+            ctx.voice_client.stop()
+
+            # Play the pitch-shifted track
+            self.playing = True
+            ctx.voice_client.play(discord.FFmpegPCMAudio(temp_path))
+
+            # Notify the user
+            await ctx.send(f"Applied pitch shift, adjusted by {semitones} semitones.")
+
+            # Wait for the track to finish playing
+            while ctx.voice_client.is_playing():
+                await asyncio.sleep(1)
+
+            # Clean up the temporary file
+            os.remove(temp_path)
+
+        except Exception as e:
+            # Handle errors and notify the user
+            await ctx.send(f"An error occurred while applying the pitch shift: {str(e)}")
+
+
+
     @commands.command(name="reverb")
     async def apply_reverb(self, ctx: commands.Context, delay: int = 1000, decay: float = 0.5):
         """
