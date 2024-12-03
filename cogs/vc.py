@@ -122,6 +122,7 @@ class vc(commands.Cog):
         self.joined = False
         self.played = True
         self.id = 0
+        self.fxint = 0
         self.undocall = ""
         self.start_time = 0
         self.currentpath = ""
@@ -890,6 +891,7 @@ class vc(commands.Cog):
                     self.played = False
                     self.paused = False
                     self.runtime = 0
+                    self.fxint = 0
                     os.remove(current_song.path)
                     
             except Exception as e:
@@ -897,6 +899,7 @@ class vc(commands.Cog):
                     await ctx.send("My audio stream was interrupted!")
 
     async def applyFX(self, ctx, path):
+        self.fxint += 1
         foptions = {'before_options': f'-ss {self.start_time}' }
         new_source = discord.FFmpegPCMAudio(
         path, **foptions) # Reduce FFmpeg output
@@ -912,7 +915,8 @@ class vc(commands.Cog):
             if self.queue._current_song != None:
                 self.queue._current_song.path = path
             while(self.playing):
-                self.start_time+=1
+                if not self.paused and self.fxint > 1:
+                 self.start_time+=1
                 await asyncio.sleep(1)
             os.remove(path)
         return 1
