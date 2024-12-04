@@ -14,9 +14,6 @@ class fx(commands.Cog):
 
    
 
-        
-
-
 #EQ class allows for high-low frequency adjustments. eqlow will specifically boost lower frequencies (bass boost, 808s, etc)
     @commands.command(name="eqlow")
     async def eqlow(self, ctx: commands.Context, value):

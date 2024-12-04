@@ -102,7 +102,7 @@ class vc(commands.Cog):
     def __init__(self, bot):
         self.audiopath = os.path.join(".", "project-03-discord-live-music-mixer-bot", "C:\\ffmpeg")        
         self.bot = bot
-        self.queue = OrderedQueue()  # custom OrderedQueue class
+        self.queue = OrderedQueue()  
         self.fqueue = FilteredAudioQueue()
         self.paused = False
         self.playing = False
@@ -110,7 +110,7 @@ class vc(commands.Cog):
         self.joined = False
         self.played = True
         self.id = 0
-        
+        self.filtering = False
         self.ytoptions = {
             'outmpath': './resources',
             'noplaylist': 'True',
@@ -138,10 +138,7 @@ class vc(commands.Cog):
 
     @commands.command(name="lowpass")
     async def fx_lowpass_filter(self, ctx: commands.Context, freq: float):
-        """
-        Analyze frequency content and apply lowpass filter to current audio.
-        freq: cutoff frequency in Hz
-        """
+        
         try:
             # 1. Get current audio
             current_song = self.queue.peek()
@@ -151,12 +148,14 @@ class vc(commands.Cog):
             samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
             samples = samples / np.iinfo(np.int16).max  # Normalize to [-1, 1]
             
-            # 3. Compute FFT
+            # 3. Compute FFT ---> FFT essentially tells us the Audio frequencies throughout the whole song
             fft_result = np.fft.rfft(samples)
             freqs = np.fft.rfftfreq(len(samples), 1/audio.frame_rate) 
             
-            # 4. Get magnitude spectrum in dB
-            # 20 and 1e-10 are arbitrary. Want to convert freq component to magnitude and use log scale since human hering is log based
+            # 4 Get magnitude spectrum in dB
+            # 20 and 1e-10 are arbitrary numbers. 
+            # Want to convert freq component, ie 3 + 2j(3 is real part & 2j is imaginary part) to magnitude
+            # Human hearing is logarithmic in nature (I also used log scale in prior audio programming scenarios)
             magnitudes = 20 * np.log10(np.abs(fft_result) + 1e-10)
             
             # 5. Find top 10 frequencies by magnitude
@@ -208,33 +207,29 @@ class vc(commands.Cog):
                             options="-loglevel error"  # Reduce FFmpeg output
                         )
                         
-                        
                         ctx.voice_client.stop()     # Stop current playback before switching source
                         await asyncio.sleep(0.5)    # Small delay to ensure clean switch
                         
-                        # (1) I have FFMPEG executable from PCM Audio & (2) The Path --> (3) Put into queue, play the song
-                        #(4) Utilize the SAME play() global boolean state variables so we ENFORCE that 1 song plays at 1 time & 
-                        #                   so that we recognize the filtered Song as a Song
                         self.fqueue.put(new_source)
                         while not self.fqueue.empty():
+                            self.filtering = True
                             self.playing = True
                             self.played = True
                             ctx.voice_client.play(new_source)
                             await ctx.send(f"Applied {freq}Hz lowpass filter")
                             
                             # Wait for the track to complete
-                        while ctx.voice_client.is_playing() or self.paused:
+                        while ctx.voice_client.is_playing() or self.paused: # ADD self.played to this condition
                             await asyncio.sleep(1)
                             
+                        self.filtering = False #ADDING for completion, since I did the same for booleans below
                         self.playing = False
                         self.played = False
                         self.paused = False   
-                        #ctx.voice_client.play(new_source)
-                        #await ctx.send(f"Applied {freq}Hz lowpass filter")
                         
                     except Exception as e:
                         if self.played:
-                            await ctx.send("IGNORE THIS ERROR!My FILTERED audio stream was interrupted!")
+                            await ctx.send("My FILTERED audio stream was interrupted!")
                     
                     finally:
                         # Cleanup in finally block to ensure it runs
@@ -251,12 +246,11 @@ class vc(commands.Cog):
         except Exception as e:
             await ctx.send(f"Error in audio processing: {str(e)}")
 
+            
     @commands.command(name="highpass")
     async def fx_highpass_filter(self, ctx: commands.Context, freq: float):
-        current_song = self.queue.peek()
-        extracted_audio = AudioSegment.from_file(current_song.path, format="mp3")
-        extracted_audio.high_pass_filter(freq)
-        return 1
+        self.filtering = True
+        
 
 
     @commands.command(name="join")
@@ -322,9 +316,11 @@ class vc(commands.Cog):
             return
             
         ctx.voice_client.stop()
+        self.filtering = False #ADDING for completion, since I set other booleans below to False
         self.playing = False
         self.paused = False
-        
+        #ADD self.played = False?
+
         if self.queue.empty():
             await ctx.send("The queue is now empty.")
             return
@@ -354,24 +350,24 @@ class vc(commands.Cog):
                 await ctx.send("Song Title: {}".format(title))
 
                 # Wait if something is already playing
-                while self.playing:
+                while self.playing or self.filtering or ctx.voice_client.is_playing() or self.paused:
                     await asyncio.sleep(1)
-
+                
                 while not self.queue.empty():
                     current_song = self.queue.get()
                     aplay = discord.FFmpegPCMAudio(executable="ffmpeg", source=current_song.path)
                     self.playing = True
                     self.played = True
+                    # if the song is filtered audio --> self.filtering = True?? --> Should I add this???? ---> NO, dont add this, since lowpass does it already
                     ctx.voice_client.play(aplay)
                     await ctx.send("Now playing {}".format(current_song.title))
-
-                    # Wait for the track to complete
                     while ctx.voice_client.is_playing() or self.paused:
                         await asyncio.sleep(1)
                         
                     self.playing = False
                     self.played = False
                     self.paused = False
+                    self.filtering = False
                     os.remove(current_song.path)
                     
             except Exception as e:
