@@ -6,17 +6,25 @@ The most important class in this program will be a Player class which will wait 
 
 ![This is a screenshot.](images.png)
 # How to run
-Provide here instructions on how to use your application.   
-- Download the latest binary from the Release section on the right on GitHub.  
-- On the command line uncompress using
-```
-tar -xzf  
-```
-- On the command line run with
-```
-./hello
-```
-- You will see Hello World! on your terminal. 
+The binary provided in ./dist/ will have the latest version of the executable available. You need the token in a .txt file in the same 
+directory as all of the files in the bot. Assuming you have both, you will be able to host the bot in your server!
+
+Commands:
+
+,join - Joins voice channel. Must be in a voice channel for this to work.
+
+,leave - Leaves voice channel.
+
+,get - Downloads a video from youtube and converts it to mp3. Adds it to the player queue and calls the player function.
+
+,pause - Pauses the track that's currently playing.
+
+,stop - Stops the track that's currently playing and moves on to the next track in the queue.
+
+,fx - Adds effects to the currently-playing track. These will be in a separate file, and the list of available effects will be
+provided in the ',help' command.
+
+,help - Provides information on the bot's functionality and how to use it in the channel the command is called.
 
 # How to contribute
 Follow this project board to know the latest status of the project: [http://...]([http://...])  
