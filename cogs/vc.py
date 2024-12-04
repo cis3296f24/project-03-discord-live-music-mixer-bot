@@ -218,7 +218,7 @@ class vc(commands.Cog):
                         await ctx.send(f"Error exporting filtered audio: {str(e)}")
                         return
 
-                    if await self.applyFX(ctx, temp_path) > 0:
+                    if await self.applyFX(ctx, temp_path, 0) > 0:
                         await ctx.send(f"Applied {freq}Hz lowpass filter")   
 
                     """
@@ -341,7 +341,7 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting filtered audio: {str(e)}")
             return
         
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Applied {freq}Hz highpass filter")
         """
         foptions = {'before_options': f'-ss {self.start_time}' }
@@ -402,10 +402,30 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting tempo adjustment: {str(e)}")
             return
         
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Applied Tempo Adjustment")
         return
     
+
+
+    @commands.command(name="seek")
+    async def seek(self, ctx: commands.Context, seconds: int):
+        try:
+            if not ctx.voice_client or not self.playing:
+                await ctx.send("I'm not playing anything right now!")
+                return
+            current_song = self.queue.peek()
+            audio = AudioSegment.from_file(current_song.path, format="mp3")
+            if(seconds >= audio.duration_seconds):
+                await ctx.send("Requested seek exceeeds the length of the track!")
+            temp_path = f"sought{int(time.time())}.mp3"
+            audio.export(temp_path, format="mp3")
+            if await self.applyFX(ctx, temp_path, seconds) > 0:
+                await ctx.send(f"Applied seek to {seconds} seconds.")
+
+        except Exception as e:
+            await ctx.send(f"Error applying seek: {str(e)}")
+        return
     @commands.command(name="pitchshift")
     async def pitch_shift(self, ctx: commands.Context, semitones: float):
         """
@@ -435,7 +455,7 @@ class vc(commands.Cog):
             temp_path = f"shifted{int(time.time())}.mp3"
             resampled_audio.export(temp_path, format="mp3")
 
-            if await self.applyFX(ctx, temp_path) > 0:
+            if await self.applyFX(ctx, temp_path, 0) > 0:
                 await ctx.send(f"Applied pitch shift of {semitones} semitones.")
 
             """
@@ -489,7 +509,7 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting treble boosted audio: {str(e)}")
             return
         
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Applied {freq}Hz treble boost filter")
         return
 
@@ -532,7 +552,7 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting treble boosted audio: {str(e)}")
             return
         
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Applied reverb successfully")
         return
 
@@ -564,7 +584,7 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting panned audio: {str(e)}")
             return
 
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Applied deep fry")
 
     @commands.command(name="normalize")
@@ -594,7 +614,7 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting normalized audio: {str(e)}")
             return
 
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Normalized Audio")
         """
         foptions = {'before_options': f'-ss {self.start_time}' }
@@ -654,7 +674,7 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting panned audio: {str(e)}")
             return
 
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Applied {val} step audio panning")
 
         """
@@ -713,7 +733,7 @@ class vc(commands.Cog):
             await ctx.send(f"Error applying gain: {str(e)}")
             return
 
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Applied {freq}step gain")
 
         """
@@ -765,7 +785,7 @@ class vc(commands.Cog):
             await ctx.send(f"Error exporting bass boosted audio: {str(e)}")
             return
         
-        if await self.applyFX(ctx, path) > 0:
+        if await self.applyFX(ctx, path, 0) > 0:
             await ctx.send(f"Applied {freq}Hz bass boost")
         return
     
@@ -898,9 +918,12 @@ class vc(commands.Cog):
                 if self.played:
                     await ctx.send("My audio stream was interrupted!")
 
-    async def applyFX(self, ctx, path):
+    async def applyFX(self, ctx, path, seconds):
         self.fxint += 1
-        foptions = {'before_options': f'-ss {self.start_time}' }
+        if(seconds != 0):
+            foptions = {'before_options': f'-ss {seconds}' }
+        else:
+            foptions = {'before_options': f'-ss {self.start_time}' }
         new_source = discord.FFmpegPCMAudio(
         path, **foptions) # Reduce FFmpeg output
         self.paused = True
